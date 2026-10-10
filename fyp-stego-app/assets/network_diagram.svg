@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="100%" height="100%" style="background: transparent;">
+  <!-- Definitions for Gradients and Markers -->
+  <defs>
+    <!-- Background grid pattern -->
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255, 255, 255, 0.03)" stroke-width="1"/>
+    </pattern>
+    
+    <!-- Gradients -->
+    <linearGradient id="grad-cover" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    
+    <linearGradient id="grad-message" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#7e22ce" />
+    </linearGradient>
+
+    <linearGradient id="grad-encoder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+
+    <linearGradient id="grad-stego" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#0891b2" />
+    </linearGradient>
+
+    <linearGradient id="grad-attack" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#b91c1c" />
+    </linearGradient>
+
+    <linearGradient id="grad-decoder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <linearGradient id="grad-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Arrow markers -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
+    </marker>
+
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#06b6d4" />
+    </marker>
+
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444" />
+    </marker>
+  </defs>
+
+  <!-- Background Grid -->
+  <rect width="100%" height="100%" fill="url(#grid)" />
+
+  <!-- Outer container card -->
+  <rect x="5" y="5" width="790" height="410" rx="12" fill="none" stroke="#334155" stroke-width="1.5" />
+
+  <!-- ==================== STAGE 1: INPUTS ==================== -->
+  
+  <!-- Cover Image (C) -->
+  <g transform="translate(40, 60)">
+    <rect width="90" height="90" rx="8" fill="url(#grad-cover)" stroke="#3b82f6" stroke-width="2" />
+    <image href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'/></svg>" x="25" y="15" width="40" height="40" />
+    <text x="45" y="75" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Cover Image (C)</text>
+    <text x="45" y="105" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle">H × W × 3</text>
+  </g>
+
+  <!-- Secret Message (M) -->
+  <g transform="translate(40, 240)">
+    <rect width="90" height="90" rx="8" fill="url(#grad-message)" stroke="#a855f7" stroke-width="2" />
+    <image href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l3.055-3.41c.195-.29.515-.474.865-.5c1.153-.086 2.294-.21 3.423-.379 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z'/></svg>" x="25" y="15" width="40" height="40" />
+    <text x="45" y="75" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Secret Msg (M)</text>
+    <text x="45" y="105" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle">ASCII Bits [L]</text>
+  </g>
+
+  <!-- ==================== STAGE 2: ENCODER CNN ==================== -->
+  
+  <!-- Concatenation & Preparation Layer -->
+  <path d="M 130 105 L 180 155" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow)" fill="none" />
+  <path d="M 130 285 L 180 235" stroke="#a855f7" stroke-width="2" marker-end="url(#arrow)" fill="none" />
+
+  <!-- Encoder Container -->
+  <g transform="translate(195, 120)">
+    <!-- Main Box -->
+    <rect width="160" height="150" rx="10" fill="url(#grad-encoder)" stroke="#334155" stroke-width="2" />
+    <rect width="160" height="150" rx="10" fill="url(#grad-glow)" pointer-events="none" />
+    <text x="80" y="25" fill="#06b6d4" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" letter-spacing="1">CNN ENCODER</text>
+    
+    <!-- Conv Layers Blocks -->
+    <g transform="translate(15, 40)">
+      <!-- Conv1 -->
+      <rect x="0" y="10" width="30" height="70" rx="2" fill="#3b82f6" opacity="0.8" />
+      <text x="15" y="50" fill="white" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle" transform="rotate(-90 15 50)">CONV</text>
+      <!-- Conv2 -->
+      <rect x="40" y="20" width="30" height="50" rx="2" fill="#06b6d4" opacity="0.8" />
+      <text x="55" y="47" fill="white" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle" transform="rotate(-90 55 47)">CONV</text>
+      <!-- Conv3 / ResNet -->
+      <rect x="80" y="15" width="40" height="60" rx="2" fill="#6366f1" opacity="0.8" />
+      <text x="100" y="50" fill="white" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" transform="rotate(-90 100 50)">RESNET</text>
+    </g>
+
+    <text x="80" y="132" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle">Prep Layer + Conv Blocks</text>
+  </g>
+
+  <!-- ==================== STAGE 3: STEGO & DISCRIMINATOR ==================== -->
+
+  <path d="M 355 195 L 400 195" stroke="#06b6d4" stroke-width="2.5" stroke-dasharray="2,2" marker-end="url(#arrow-cyan)" fill="none" />
+
+  <!-- Stego Image (S) -->
+  <g transform="translate(415, 60)">
+    <rect width="90" height="90" rx="8" fill="url(#grad-stego)" stroke="#06b6d4" stroke-width="2" />
+    <image href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'/></svg>" x="25" y="15" width="40" height="40" />
+    <text x="45" y="75" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">Stego Image (S)</text>
+    <text x="45" y="105" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle">H × W × 3</text>
+  </g>
+
+  <!-- Discriminator (Aesthetic side branch) -->
+  <path d="M 460 60 L 460 30 C 460 20, 310 20, 310 20 L 310 110" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow)" fill="none" />
+  <g transform="translate(260, 10)">
+    <rect width="100" height="20" rx="4" fill="#1e293b" stroke="#64748b" stroke-width="1" />
+    <text x="50" y="13" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" text-anchor="middle">Adversarial loss</text>
+  </g>
+
+  <!-- ==================== STAGE 4: ATTACK SIMULATOR ==================== -->
+
+  <path d="M 460 155 L 460 215" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)" fill="none" />
+
+  <!-- Downscaling Attack Node -->
+  <g transform="translate(415, 225)">
+    <rect width="90" height="60" rx="8" fill="url(#grad-attack)" stroke="#ef4444" stroke-width="1.5" />
+    <text x="45" y="25" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">DOWNSCALING</text>
+    <text x="45" y="38" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">ATTACK</text>
+    <text x="45" y="52" fill="#fecaca" font-family="monospace" font-size="8" text-anchor="middle">r ∈ {0.5, 0.25}</text>
+  </g>
+
+  <path d="M 510 255 L 560 255" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow-red)" fill="none" />
+
+  <!-- Downscaled Stego (S') -->
+  <g transform="translate(570, 215)">
+    <rect width="80" height="80" rx="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5" />
+    <image href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='gray'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'/></svg>" x="25" y="10" width="30" height="30" />
+    <text x="40" y="58" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="middle">Attack Stego (S')</text>
+    <text x="40" y="70" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="8" text-anchor="middle">rH × rW × 3</text>
+  </g>
+
+  <!-- ==================== STAGE 5: DECODER CNN ==================== -->
+
+  <path d="M 610 215 L 610 150 C 610 130, 675 130, 675 130 L 675 190" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)" fill="none" />
+
+  <!-- Decoder Box -->
+  <g transform="translate(620, 200)">
+    <rect width="140" height="110" rx="8" fill="url(#grad-encoder)" stroke="#334155" stroke-width="1.5" />
+    <rect width="140" height="110" rx="8" fill="url(#grad-glow)" pointer-events="none" />
+    <text x="70" y="20" fill="#10b981" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" letter-spacing="0.5">CNN DECODER</text>
+    
+    <!-- Conv Blocks -->
+    <g transform="translate(10, 30)">
+      <rect x="5" y="5" width="25" height="50" rx="2" fill="#10b981" opacity="0.8" />
+      <text x="17" y="30" fill="white" font-family="monospace" font-size="7" font-weight="bold" text-anchor="middle" transform="rotate(-90 17 30)">CONV</text>
+      
+      <rect x="35" y="15" width="25" height="35" rx="2" fill="#059669" opacity="0.8" />
+      <text x="47" y="32" fill="white" font-family="monospace" font-size="7" font-weight="bold" text-anchor="middle" transform="rotate(-90 47 32)">CONV</text>
+      
+      <text x="95" y="20" fill="#a855f7" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" text-anchor="middle">Message</text>
+      <text x="95" y="32" fill="#a855f7" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" text-anchor="middle">Extraction</text>
+      <path d="M 65 30 L 80 30" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" fill="none" />
+    </g>
+
+    <text x="70" y="100" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="8" text-anchor="middle">Extracted Bitstream</text>
+  </g>
+
+  <!-- Recovered Message (M') -->
+  <path d="M 690 310 L 690 350" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)" fill="none" />
+  
+  <g transform="translate(645, 360)">
+    <rect width="90" height="40" rx="4" fill="url(#grad-decoder)" stroke="#10b981" stroke-width="1.5" />
+    <text x="45" y="24" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="middle">Recov. Msg (M')</text>
+  </g>
+
+  <!-- Clean visual brackets / lines separating groups -->
+  <path d="M 40 370 L 350 370" stroke="#334155" stroke-width="1" />
+  <circle cx="195" cy="370" r="3" fill="#3b82f6" />
+  <text x="195" y="385" fill="#64748b" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" font-weight="bold">STAGE 1: EMBEDDING MODULE</text>
+
+  <path d="M 415 370 L 760 370" stroke="#334155" stroke-width="1" />
+  <circle cx="587" cy="370" r="3" fill="#ef4444" />
+  <text x="587" y="385" fill="#64748b" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" font-weight="bold">STAGE 2: ATTACK &amp; EXTRACTION MODULE</text>
+
+</svg>

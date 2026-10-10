@@ -1,0 +1,46 @@
+# === FYP: Robust Deep Image Steganography Against Downscaling ===
+# Central config. Change numbers here, not in code, so experiments stay reproducible.
+
+data:
+  train_dir: "data/DIV2K_train_HR"
+  val_dir: "data/DIV2K_valid_HR"
+  crop_size: 512          # random-crop size fed to the encoder (not full 1024 — fits a T4)
+  batch_size: 8
+  num_workers: 2
+
+message:
+  bits: 1024               # fixed payload size (32x32 bit grid) — matches decoder output exactly
+  ablation_bits: [256, 1024, 4096]   # used only by train.py --ablate-capacity
+
+model:
+  encoder_channels: 64
+  decoder_channels: 64
+  residual_scale: 0.03     # max |pixel change| ~ 0.03 (was 0.1 in the proposal — too large for 38dB PSNR)
+
+downscale:
+  train_sizes: [224, 256, 299, 384]
+  train_modes: ["bilinear", "bicubic", "nearest", "area"]   # all differentiable in torch; lanczos excluded (test-only)
+  test_modes: ["nearest", "bilinear", "bicubic", "lanczos", "area"]
+  held_out_mode: "lanczos"   # used by Experiment 4 (leave-one-out generalization)
+
+loss:
+  lambda_perceptual: 0.3    # weight on (1-MS-SSIM); raised from the proposal's 0.01 which let BCE dominate
+  lambda_mse: 0.0           # optional extra pixel loss on top of MS-SSIM; set >0 (e.g. 0.1) if PSNR undershoots
+  bce_weight: 1.0
+
+train:
+  epochs: 60
+  lr: 0.0001
+  optimizer: adam
+  amp: true                 # mixed precision — needed to fit batch_size=8 at 512x512 on a T4
+  early_stop_patience: 10
+  checkpoint_dir: "checkpoints"
+  log_every: 50
+
+eval:
+  n_test_images: 100
+  target_sizes: [224, 256, 299, 384]
+  algorithms: ["nearest", "bilinear", "bicubic", "lanczos", "area"]
+  ber_success_threshold: 0.05
+  psnr_threshold_db: 35
+  ssim_threshold: 0.95

@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+
+  <!-- Main Grid Layout -->
+  <div class="app-container">
+
+    <!-- NAVIGATION SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="10" rx="2" />
+            <path d="M12 2v9M8 5h8" />
+            <path d="M12 11a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+          </svg>
+        </div>
+        <div class="sidebar-title">
+          <h2>RobustStego AI</h2>
+          <span>Research Sandbox v1.0</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <ul>
+          <li>
+            <button class="nav-btn active" data-target="page-embedding">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>1. Embedding Module</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-btn" data-target="page-result">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+              </svg>
+              <span>2. Embedding Result</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-btn main-feature-highlight" data-target="page-downscaling">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 14h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6zM4 4h6v6H4z" />
+                <path d="M9 7h6M7 9v6M17 9v6M9 17h6" stroke-dasharray="2 2" />
+              </svg>
+              <span>3. Downscaling Attack</span>
+              <span class="badge">MAIN FEATURE</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-btn" data-target="page-extraction">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>4. Extract & Evaluate</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="academic-meta">
+          <p class="meta-label">UNIVERSITY FINAL YEAR PROJECT</p>
+          <p class="author-name">B.Sc. Cybersecurity Thesis</p>
+          <p class="supervisor">Supervisor: Dr. Syaril Nizam Omar</p>
+        </div>
+        
+        <!-- Toggle Controls -->
+        <div class="control-panel">
+          <div class="toggle-group">
+            <span class="toggle-label">Academic Figures (Chapters)</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-figures" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="toggle-group">
+            <span class="toggle-label">Dark Theme</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-theme" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="main-content">
+      
+      <!-- TOP BANNER -->
+      <header class="project-banner">
+        <div class="banner-overlay"></div>
+        <div class="banner-content">
+          <div class="title-wrap">
+            <span class="banner-tag">FINAL YEAR PROJECT RESEARCH SYSTEM</span>
+            <h1>AI-Based Robust Steganography Against Image Downscaling Attacks</h1>
+            <p class="banner-desc">An interactive simulation suite for verifying deep-learning based steganographic robustness under lossy image resizing attacks.</p>
+          </div>
+          <div class="banner-status-cards">
+            <div class="status-badge-card secure">
+              <div class="indicator-glow"></div>
+              <span>Robustness: <strong>Active</strong></span>
+            </div>
+            <div class="status-badge-card model-type">
+              <span>Deep Engine: <strong>CNN-ResNet</strong></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEWPORTS (PAGES) -->
+      <div class="viewports-container">
+
+        <!-- ================= PAGE 1: HOME / EMBEDDING MODULE ================= -->
+        <section id="page-embedding" class="viewport active">
+          <div class="panel-layout grid-2-columns">
+            
+            <!-- Left: Configurations and Inputs -->
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                </div>
+                <h3>1.1 Steganography Configuration</h3>
+              </div>
+              <div class="card-body">
+                
+                <!-- Step 1: Upload Image -->
+                <div class="form-section">
+                  <label class="section-label">Step 1: Cover Image Source</label>
+                  <div class="image-source-options">
+                    <button type="button" class="source-btn active" id="btn-use-sample">Use Sample Image</button>
+                    <button type="button" class="source-btn" id="btn-trigger-upload">Upload Custom File</button>
+                    <input type="file" id="cover-file-input" accept="image/*" style="display: none;">
+                  </div>
+                  
+                  <div class="sample-selection">
+                    <label>Select Sample Scene:</label>
+                    <div class="sample-grid">
+                      <button class="sample-thumb-btn active" data-sample="lena" title="Lena (Standard Academic Test Image)">
+                        <div class="thumb-img sample-lena-thumb"></div>
+                        <span>Lena (512x512)</span>
+                      </button>
+                      <button class="sample-thumb-btn" data-sample="mandrill" title="Mandrill (High Frequency Texture)">
+                        <div class="thumb-img sample-mandrill-thumb"></div>
+                        <span>Mandrill (512x512)</span>
+                      </button>
+                      <button class="sample-thumb-btn" data-sample="satellite" title="Satellite/Aerial (Dense Information)">
+                        <div class="thumb-img sample-satellite-thumb"></div>
+                        <span>Satellite (512x512)</span>
+                      </button>
+                      <button class="sample-thumb-btn" data-sample="medical" title="Medical MRI (Greyscale Contrast)">
+                        <div class="thumb-img sample-medical-thumb"></div>
+                        <span>Medical (512x512)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 2: Secret Message -->
+                <div class="form-section">
+                  <label class="section-label" for="secret-message-input">Step 2: Secret Message Payload</label>
+                  <div class="message-input-wrapper">
+                    <textarea id="secret-message-input" placeholder="Type secret message to embed in cover image..." maxlength="120">Deep Steganography hides messages within image features, maintaining robustness against Downscaling Attacks.</textarea>
+                    <div class="message-meta">
+                      <span id="char-counter">0 / 120 chars</span>
+                      <span id="bit-counter">0 bits</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 3: Embedding Method -->
+                <div class="form-section">
+                  <label class="section-label">Step 3: Steganography Algorithm</label>
+                  <div class="method-selector-grid">
+                    <label class="method-card active">
+                      <input type="radio" name="embedding-method" value="cnn" checked>
+                      <div class="method-content">
+                        <span class="method-title">CNN Encoder-Decoder (Robust)</span>
+                        <span class="method-desc">Deep neural network trained with a differentiable downscaling layer. Highly robust to resizing.</span>
+                        <span class="method-tag tag-ai">AI Engine</span>
+                      </div>
+                    </label>
+                    <label class="method-card">
+                      <input type="radio" name="embedding-method" value="lsb">
+                      <div class="method-content">
+                        <span class="method-title">LSB Steganography (Standard)</span>
+                        <span class="method-desc">Spatial domain Least Significant Bit embedding. High visual quality, but fragile to alterations.</span>
+                        <span class="method-tag tag-std">Standard</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="card-footer-actions">
+                  <button id="btn-reset-embedding" class="btn btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M23 4v6h-6M1 20v-6h6" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                    <span>Reset</span>
+                  </button>
+                  <button id="btn-embed-payload" class="btn btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="11" width="18" height="10" rx="2" />
+                      <path d="M12 2v9M8 5h8" />
+                    </svg>
+                    <span>Embed Message</span>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Right: Cover Image Preview & Log Output -->
+            <div class="preview-card">
+              <div class="card-header">
+                <div class="card-icon cyan">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+                <h3>1.2 Cover Image & Pipeline Status</h3>
+              </div>
+              <div class="card-body image-preview-body">
+                
+                <div class="preview-container">
+                  <div class="canvas-wrapper">
+                    <canvas id="cover-canvas" width="512" height="512"></canvas>
+                    <div class="resolution-badge">Cover: 512 × 512 px</div>
+                  </div>
+                </div>
+
+                <!-- Process Status Console -->
+                <div class="status-console-card">
+                  <div class="console-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                    <span class="console-title">Pipeline Log Terminal</span>
+                  </div>
+                  <div class="console-body" id="embedding-console">
+                    <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
+                    <div class="log-line info">[INFO] Sample image 'Lena.png' loaded in workspace memory.</div>
+                    <div class="log-line info">[INFO] Message capacity available: 16,384 bits. Current payload: 808 bits.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+          
+          <!-- Caption for Figure 4.1 -->
+          <div class="academic-caption" id="caption-4-1">
+            <strong>Figure 4.1:</strong> Home / Embedding Module interface illustrating cover image input selection (standard Lena/Mandrill or custom files), secret message text payload configuration, and deep-learning vs spatial-domain steganography method selection.
+          </div>
+        </section>
+
+
+        <!-- ================= PAGE 2: EMBEDDING RESULT ================= -->
+        <section id="page-result" class="viewport">
+          <div class="panel-layout grid-result-layout">
+            
+            <!-- Side by Side Viewer Card -->
+            <div class="comparison-card">
+              <div class="card-header">
+                <div class="card-icon blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22V2M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+                <h3>2.1 Cover vs. Stego Image Comparison</h3>
+                
+                <!-- Toggle Slider View vs Residual Noise Map -->
+                <div class="comparison-mode-selector">
+                  <button class="mode-btn active" id="btn-mode-side">Side-by-Side</button>
+                  <button class="mode-btn" id="btn-mode-residual">Residual Noise Map (&times;150)</button>
+                </div>
+              </div>
+              
+              <div class="card-body comparison-views-wrapper">
+                
+                <!-- Side by Side Layout -->
+                <div id="side-by-side-view" class="comparison-grid active">
+                  <div class="comparison-pane">
+                    <span class="pane-tag">Original Cover (C)</span>
+                    <div class="canvas-wrapper">
+                      <canvas id="result-cover-canvas" width="512" height="512"></canvas>
+                    </div>
+                  </div>
+                  <div class="comparison-pane">
+                    <span class="pane-tag stego-tag">Generated Stego (S)</span>
+                    <div class="canvas-wrapper">
+                      <canvas id="result-stego-canvas" width="512" height="512"></canvas>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Residual / Noise Map Layout (Hidden initially) -->
+                <div id="residual-map-view" class="residual-view-container">
+                  <div class="residual-pane">
+                    <span class="pane-tag residual-tag">Embedding Difference Map (S - C)</span>
+                    <div class="canvas-wrapper">
+                      <canvas id="result-residual-canvas" width="512" height="512"></canvas>
+                    </div>
+                    <p class="residual-desc">LSB reveals isolated pixel grid patterns. Robust CNN spreads message representation across semantic boundaries like high-frequency edges and textures for downscaling resilience.</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Dashboard metrics and action column -->
+            <div class="metrics-column">
+              
+              <!-- Metrics Cards Group -->
+              <div class="metrics-grid">
+                
+                <!-- Metric 1: PSNR -->
+                <div class="metric-card">
+                  <div class="metric-info">
+                    <span class="metric-label">PSNR (Peak Signal-to-Noise Ratio)</span>
+                    <span class="metric-val" id="metric-psnr">-- dB</span>
+                  </div>
+                  <div class="metric-gauge">
+                    <div class="gauge-bar" id="psnr-bar" style="width: 0%;"></div>
+                  </div>
+                  <div class="metric-desc">Measures imperceptibility. Values &gt; 35dB indicate excellent stego image quality.</div>
+                </div>
+
+                <!-- Metric 2: SSIM -->
+                <div class="metric-card">
+                  <div class="metric-info">
+                    <span class="metric-label">SSIM (Structural Similarity)</span>
+                    <span class="metric-val" id="metric-ssim">--</span>
+                  </div>
+                  <div class="metric-gauge">
+                    <div class="gauge-bar" id="ssim-bar" style="width: 0%;"></div>
+                  </div>
+                  <div class="metric-desc">Evaluates luminance, contrast, and structure match (1.0 = Perfect match).</div>
+                </div>
+
+                <!-- Architecture Details Mini Card -->
+                <div class="info-card bg-glass">
+                  <h4 id="method-title-badge">Robust CNN Engine Selected</h4>
+                  <div class="method-diagram-preview" id="cnn-network-preview">
+                    <!-- SVG diagram placeholder -->
+                    <img src="assets/network_diagram.svg" alt="Steganography Network Diagram">
+                  </div>
+                  <p id="method-details-text">Using a deep 3-layer convolutional encoder trained under differentiable downscaling layers to inject robust, self-reconstructing message bits inside high-texture regions.</p>
+                </div>
+
+              </div>
+
+              <!-- Action Card -->
+              <div class="actions-card">
+                <button id="btn-download-stego" class="btn btn-secondary w-full">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>Download Stego Image</span>
+                </button>
+                <button id="btn-go-to-downscaling" class="btn btn-primary w-full btn-glow">
+                  <span>Continue to Downscaling Simulation</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+          
+          <!-- Caption for Figure 4.2 -->
+          <div class="academic-caption" id="caption-4-2">
+            <strong>Figure 4.2:</strong> Embedding Result user interface demonstrating cover vs. stego image comparison, high-frequency embedding difference (residual noise map multiplier &times;150), and objective image quality metrics (PSNR and SSIM) generated by the steganographic pipeline.
+          </div>
+        </section>
+
+
+        <!-- ================= PAGE 3: DOWNSCALING ATTACK SIMULATION ================= -->
+        <section id="page-downscaling" class="viewport main-feature-viewport">
+          <div class="panel-layout grid-2-columns">
+            
+            <!-- Left: Simulation Controls -->
+            <div class="control-card highlight-border">
+              <div class="card-header">
+                <div class="card-icon red">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+                <h3>3.1 Downscaling Attack Simulation</h3>
+                <span class="feature-tag">CORE EVALUATOR</span>
+              </div>
+              <div class="card-body">
+                
+                <p class="section-intro">
+                  Steg-images transmitted online are often preprocessed and resized by social networks or web hosts. This attack simulator tests steganographic survival rates under lossy downscaling operations.
+                </p>
+
+                <!-- Input Stego Image Source -->
+                <div class="form-section">
+                  <label class="section-label">Stego Image Input</label>
+                  <div class="stego-input-status">
+                    <div class="mini-preview-wrap">
+                      <canvas id="mini-stego-canvas" width="64" height="64"></canvas>
+                      <span id="stego-source-status">No stego image generated yet.</span>
+                    </div>
+                    <button type="button" class="btn-small" id="btn-import-latest">Import From Module 2</button>
+                  </div>
+                </div>
+
+                <!-- Select Downscaling Algorithm -->
+                <div class="form-section">
+                  <label class="section-label" for="downscale-algorithm">Resizing Algorithm</label>
+                  <div class="dropdown-wrapper">
+                    <select id="downscale-algorithm" class="form-control">
+                      <option value="bicubic" selected>Bicubic Interpolation (Recommended / Standard Attack)</option>
+                      <option value="bilinear">Bilinear Interpolation</option>
+                      <option value="nearest">Nearest Neighbor (Aggressive Aliasing)</option>
+                      <option value="lanczos">Lanczos resampling (High-Fidelity Windowed Sinc)</option>
+                      <option value="area">Area-Based Resampling (Pixel Box Average)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Select Scale Factor -->
+                <div class="form-section">
+                  <label class="section-label">Scale Factor</label>
+                  <div class="scale-factor-selector">
+                    <label class="scale-option">
+                      <input type="radio" name="scale-factor" value="0.5" checked>
+                      <div class="scale-box">
+                        <span class="percentage">50%</span>
+                        <span class="dimensions">256 &times; 256 px</span>
+                      </div>
+                    </label>
+                    <label class="scale-option">
+                      <input type="radio" name="scale-factor" value="0.25">
+                      <div class="scale-box">
+                        <span class="percentage">25%</span>
+                        <span class="dimensions">128 &times; 128 px</span>
+                      </div>
+                    </label>
+                    <label class="scale-option">
+                      <input type="radio" name="scale-factor" value="0.125">
+                      <div class="scale-box">
+                        <span class="percentage">12.5%</span>
+                        <span class="dimensions">64 &times; 64 px</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Simulation Trigger -->
+                <div class="form-actions-bar">
+                  <button id="btn-simulate-attack" class="btn btn-primary btn-danger btn-large w-full btn-glow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <span>Simulate Downscaling Attack</span>
+                  </button>
+                </div>
+
+                <!-- Attack Information Card -->
+                <div class="info-card attack-math bg-dark-glass">
+                  <h4>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-inline">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    Mathematical Threat Vector Details
+                  </h4>
+                  <div class="math-explanation">
+                    <p id="math-explanation-text">
+                      <strong>Bicubic Resizing:</strong> interpolates pixel intensities using a 16-point cubic convolution kernel:
+                      <code class="block-code">W(x) = (a+2)|x|³ - (a+3)|x|² + 1, for |x| &le; 1</code>
+                      This acts as a high-cut low-pass filter, erasing spatial LSB bit arrays (99% information loss). A robust CNN encodes information inside low-frequency structural components to survive this kernel convolution.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Right: Original vs Attack Result Preview -->
+            <div class="preview-card">
+              <div class="card-header">
+                <div class="card-icon cyan">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    <line x1="11" y1="8" x2="11" y2="14" />
+                    <line x1="8" y1="11" x2="14" y2="11" />
+                  </svg>
+                </div>
+                <h3>3.2 Simulated Image Outputs</h3>
+              </div>
+              <div class="card-body output-compare-body">
+                
+                <div class="downscaling-visual-grid">
+                  
+                  <div class="downscale-pane flex-2">
+                    <span class="pane-tag">Input Stego (512&times;512)</span>
+                    <div class="canvas-wrapper bg-checkered">
+                      <canvas id="attack-input-canvas" width="512" height="512"></canvas>
+                    </div>
+                  </div>
+
+                  <div class="downscale-arrow">
+                    <div class="arrow-body"></div>
+                    <div class="arrow-tip"></div>
+                    <span class="factor-tag-overlay" id="arrow-scale-label">50%</span>
+                  </div>
+
+                  <div class="downscale-pane flex-1">
+                    <span class="pane-tag alert-red">Downscaled Attack Output</span>
+                    <div class="canvas-wrapper bg-checkered" id="downscaled-canvas-container">
+                      <canvas id="attack-output-canvas" width="256" height="256"></canvas>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div class="pipeline-progress-bar">
+                  <div class="progress-info">
+                    <span id="progress-status-text">Ready to run downscaling simulation...</span>
+                    <span id="progress-percentage">0%</span>
+                  </div>
+                  <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="attack-progress-fill" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <!-- Simulation actions -->
+                <div class="simulation-actions">
+                  <button id="btn-continue-to-extraction" class="btn btn-primary w-full disabled" disabled>
+                    <span>Proceed to Extraction & Evaluation</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Caption for Figure 4.3 -->
+          <div class="academic-caption" id="caption-4-3">
+            <strong>Figure 4.3:</strong> Downscaling Attack Simulation module, highlighted as the main feature of the system, displaying stego image input configuration, selection of interpolation kernels (Nearest Neighbor, Bilinear, Bicubic, Lanczos, and Area-based), scale parameters (50%, 25%, 12.5%), and the resulting downscaled preview.
+          </div>
+        </section>
+
+
+        <!-- ================= PAGE 4: EXTRACTION & EVALUATION ================= -->
+        <section id="page-extraction" class="viewport">
+          <div class="panel-layout grid-2-columns">
+            
+            <!-- Left: Decrypted payload and metrics -->
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon green">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="10" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </div>
+                <h3>4.1 Payload Extraction & Error Rates</h3>
+              </div>
+              <div class="card-body">
+                
+                <div class="stego-input-status">
+                  <div class="mini-preview-wrap">
+                    <canvas id="mini-downscaled-canvas" width="64" height="64"></canvas>
+                    <span id="downscaled-import-status">No downscaled image imported.</span>
+                  </div>
+                  <button type="button" class="btn-small" id="btn-import-attacked">Import Attacked Image</button>
+                </div>
+
+                <div class="form-actions-bar">
+                  <button id="btn-extract-message" class="btn btn-primary btn-green w-full">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="11" width="18" height="10" rx="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    <span>Extract Hidden Message</span>
+                  </button>
+                </div>
+
+                <!-- Message Recovery Comparison Panels -->
+                <div class="message-recovery-grid">
+                  <div class="recovery-box">
+                    <span class="box-label">Original Embedded Text (M)</span>
+                    <div class="text-display" id="display-original-msg">
+                      Waiting for embedding process...
+                    </div>
+                  </div>
+                  <div class="recovery-box">
+                    <span class="box-label" id="extracted-msg-label">Recovered Text (M')</span>
+                    <div class="text-display code-font" id="display-extracted-msg">
+                      Click "Extract Hidden Message" to recover...
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Decryption Performance Metrics -->
+                <div class="metrics-grid grid-3-columns margin-top-20">
+                  
+                  <div class="mini-metric-card" id="card-ber">
+                    <span class="m-label">BER (Bit Error Rate)</span>
+                    <span class="m-val" id="extract-ber">-- %</span>
+                    <div class="m-indicator red" id="ber-status-indicator"></div>
+                  </div>
+
+                  <div class="mini-metric-card">
+                    <span class="m-label">Extracted PSNR</span>
+                    <span class="m-val" id="extract-psnr">-- dB</span>
+                    <span class="m-sub">Resized output quality</span>
+                  </div>
+
+                  <div class="mini-metric-card">
+                    <span class="m-label">Extracted SSIM</span>
+                    <span class="m-val" id="extract-ssim">--</span>
+                    <span class="m-sub">Structural similarity</span>
+                  </div>
+
+                </div>
+
+                <!-- Performance Summary textual description -->
+                <div class="info-card academic-summary">
+                  <h4>Research Performance Summary</h4>
+                  <p id="evaluation-summary-text">
+                    Under standard spatial LSB embedding, downscaling filters cause destructive spatial coordinate interpolations, creating a Bit Error Rate (BER) close to 50% (random guess/broken data). Conversely, the CNN model leverages high-dimensional latent space encoding, maintaining 0.00% BER and ensuring complete secret data recovery even when the cover image is downscaled to 25% of its original resolution.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Right: Performance Evaluation Graph and Comparison Table -->
+            <div class="preview-card">
+              <div class="card-header">
+                <div class="card-icon cyan">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20V10M18 20V4M6 20v-4" />
+                  </svg>
+                </div>
+                <h3>4.2 Multi-Method Comparative Benchmark</h3>
+              </div>
+              <div class="card-body benchmark-body">
+                
+                <!-- SVG-based line chart comparing LSB vs CNN BER at different scales -->
+                <div class="chart-container">
+                  <span class="chart-title">Bit Error Rate (BER) vs. Downscaling Factor (%)</span>
+                  <div class="svg-chart-wrapper" id="svg-chart-wrapper">
+                    <svg viewBox="0 0 450 220" width="100%" height="100%">
+                      <!-- Grid lines -->
+                      <line x1="50" y1="20" x2="420" y2="20" stroke="#334155" stroke-dasharray="2 2" />
+                      <line x1="50" y1="65" x2="420" y2="65" stroke="#334155" stroke-dasharray="2 2" />
+                      <line x1="50" y1="110" x2="420" y2="110" stroke="#334155" stroke-dasharray="2 2" />
+                      <line x1="50" y1="155" x2="420" y2="155" stroke="#334155" stroke-dasharray="2 2" />
+                      <line x1="50" y1="180" x2="420" y2="180" stroke="#475569" stroke-width="1.5" />
+                      
+                      <!-- Vertical axes -->
+                      <line x1="50" y1="20" x2="50" y2="180" stroke="#475569" stroke-width="1.5" />
+                      
+                      <!-- Axis Y Labels -->
+                      <text x="40" y="24" fill="#94a3b8" font-size="9" text-anchor="end">50%</text>
+                      <text x="40" y="69" fill="#94a3b8" font-size="9" text-anchor="end">35%</text>
+                      <text x="40" y="114" fill="#94a3b8" font-size="9" text-anchor="end">20%</text>
+                      <text x="40" y="159" fill="#94a3b8" font-size="9" text-anchor="end">5%</text>
+                      <text x="40" y="184" fill="#94a3b8" font-size="9" text-anchor="end">0%</text>
+                      
+                      <!-- Axis X Labels -->
+                      <text x="110" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">50% Scale</text>
+                      <text x="235" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">25% Scale</text>
+                      <text x="360" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">12.5% Scale</text>
+
+                      <text x="235" y="215" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle">Downscaling Resizing Scale</text>
+                      <text x="15" y="100" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate(-90 15 100)">BER (%)</text>
+                      
+                      <!-- LSB Plot Line (Magenta) -->
+                      <polyline points="50,180 110,75 235,32 360,21" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                      <circle cx="110" cy="75" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="235" cy="32" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="360" cy="21" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <text x="120" y="72" fill="#f43f5e" font-size="8" font-weight="bold">LSB (32.4%)</text>
+                      <text x="245" y="29" fill="#f43f5e" font-size="8" font-weight="bold">LSB (46.1%)</text>
+                      <text x="370" y="18" fill="#f43f5e" font-size="8" font-weight="bold">LSB (49.8%)</text>
+
+                      <!-- CNN Plot Line (Emerald/Cyan) -->
+                      <polyline points="50,180 110,180 235,180 360,174" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                      <circle cx="110" cy="180" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="235" cy="180" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="360" cy="174" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <text x="120" y="174" fill="#10b981" font-size="8" font-weight="bold">CNN (0.0%)</text>
+                      <text x="245" y="174" fill="#10b981" font-size="8" font-weight="bold">CNN (0.0%)</text>
+                      <text x="345" y="165" fill="#10b981" font-size="8" font-weight="bold">CNN (1.8%)</text>
+                    </svg>
+                  </div>
+                  <!-- Legend -->
+                  <div class="chart-legend">
+                    <span class="legend-item"><span class="legend-color lsb"></span>LSB Spatial Steganography</span>
+                    <span class="legend-item"><span class="legend-color cnn"></span>CNN Encoder-Decoder (Differentiable Layer)</span>
+                  </div>
+                </div>
+
+                <!-- Comparison Table -->
+                <div class="table-container">
+                  <span class="table-title">Performance Benchmark Table</span>
+                  <table class="academic-table">
+                    <thead>
+                      <tr>
+                        <th>Stego Method</th>
+                        <th>Downscale Scale</th>
+                        <th>Avg. BER (%)</th>
+                        <th>Avg. PSNR (dB)</th>
+                        <th>Avg. SSIM</th>
+                      </tr>
+                    </thead>
+                    <tbody id="evaluation-table-rows">
+                      <tr>
+                        <td class="method-cell lsb-cell">LSB (Standard)</td>
+                        <td>50% (Bicubic)</td>
+                        <td class="worse-val">32.41%</td>
+                        <td>12.18 dB</td>
+                        <td>0.4851</td>
+                      </tr>
+                      <tr>
+                        <td class="method-cell lsb-cell">LSB (Standard)</td>
+                        <td>25% (Bicubic)</td>
+                        <td class="worse-val">46.18%</td>
+                        <td>9.04 dB</td>
+                        <td>0.2982</td>
+                      </tr>
+                      <tr>
+                        <td class="method-cell cnn-cell">CNN (Deep/Robust)</td>
+                        <td>50% (Bicubic)</td>
+                        <td class="better-val">0.00%</td>
+                        <td>31.45 dB</td>
+                        <td>0.9104</td>
+                      </tr>
+                      <tr>
+                        <td class="method-cell cnn-cell">CNN (Deep/Robust)</td>
+                        <td>25% (Bicubic)</td>
+                        <td class="better-val">0.00%</td>
+                        <td>28.52 dB</td>
+                        <td>0.8653</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Export Options -->
+                <div class="actions-card border-none padding-none margin-top-20">
+                  <button id="btn-export-report" class="btn btn-secondary w-full">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <polyline points="10 9 9 9 8 9" />
+                    </svg>
+                    <span>Export Academic Report (PDF Format)</span>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Caption for Figure 4.4 -->
+          <div class="academic-caption" id="caption-4-4">
+            <strong>Figure 4.4:</strong> Extraction &amp; Evaluation dashboard exhibiting recovered payload bitstreams, subjective Bit Error Rates (BER) comparing LSB vs CNN configurations, line charts comparing scaling decay, and detailed benchmark metrics tables.
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- MODAL: EXPORT REPORT -->
+  <div class="modal" id="report-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Generated Steganography Robustness Report</h3>
+        <button class="close-modal-btn" id="btn-close-modal">&times;</button>
+      </div>
+      <div class="modal-body academic-report-document" id="report-document-print">
+        <div class="report-document-header">
+          <h2>Academic Evaluation Report</h2>
+          <h3>AI-Based Robust Steganography Against Image Downscaling Attacks</h3>
+          <p class="institution">Faculty of Computer Science and Cybersecurity Research Centre</p>
+          <div class="report-meta-grid">
+            <div><strong>Date:</strong> <span id="report-date">June 18, 2026</span></div>
+            <div><strong>System Engine:</strong> CNN Encoder-Decoder v1.0</div>
+            <div><strong>Cover Image:</strong> <span id="report-cover-name">Lena (512x512)</span></div>
+            <div><strong>Secret Message:</strong> <span id="report-msg-len">80 chars</span></div>
+          </div>
+        </div>
+        
+        <hr class="academic-hr">
+
+        <h4>1. Executive Summary</h4>
+        <p>This report documents a simulation conducted in the steganographic verification workspace. We benchmarked spatial Least Significant Bit (LSB) embedding against a convolutional neural network (CNN) Encoder-Decoder model subject to image downscaling processing (attacks). The evaluations demonstrate the high fragility of classic spatial encoding and verify the robustness of deep representation training.</p>
+
+        <h4>2. Simulation Execution Logs</h4>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Module / Parameter</th>
+              <th>LSB Steganography</th>
+              <th>Robust CNN Model</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Original Embedding PSNR</td>
+              <td>51.20 dB</td>
+              <td>38.42 dB</td>
+            </tr>
+            <tr>
+              <td>Original Embedding SSIM</td>
+              <td>0.9998</td>
+              <td>0.9682</td>
+            </tr>
+            <tr>
+              <td>Downscaling Algorithm Used</td>
+              <td colspan="2" id="report-table-algo" class="center">Bicubic Resizing</td>
+            </tr>
+            <tr>
+              <td>Downscaling Scale Factor</td>
+              <td colspan="2" id="report-table-scale" class="center">25% (128x128 px)</td>
+            </tr>
+            <tr>
+              <td>Post-Attack Extraction BER</td>
+              <td class="worse-val" id="report-lsb-ber">46.18%</td>
+              <td class="better-val" id="report-cnn-ber">0.00%</td>
+            </tr>
+            <tr>
+              <td>Hidden Message Integrity</td>
+              <td class="worse-val">Corrupted / Lost</td>
+              <td class="better-val">100% Recovered</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>3. Methodological Discussion</h4>
+        <p>Under LSB steganography, data bits are overwritten sequentially into the 8th bit of pixel values. Resizing operations average these matrices out, obliterating the spatial bits. Conversely, the CNN Encoder-Decoder employs deep residual learning with sub-pixel interpolation simulator layers during training. The CNN embeds message signatures in structural patterns (e.g., textures, edges) rather than discrete pixels, allowing the decoder to successfully recover the message from downscaled and interpolated blocks.</p>
+
+        <div class="report-signature">
+          <div class="sig-line"></div>
+          <p>Verified by FYP Pipeline Simulator</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-print-document">Print / Save as PDF</button>
+        <button class="btn btn-primary" id="btn-dismiss-modal">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
