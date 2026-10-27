@@ -146,12 +146,15 @@ def main():
                     stego, cfg["downscale"]["train_sizes"], cfg["downscale"]["train_modes"]
                 )
                 recovered = decoder(downscaled)
-                loss, parts = total_loss(
-                    cover, stego, message, recovered,
-                    lambda_perceptual=cfg["loss"]["lambda_perceptual"],
-                    lambda_mse=cfg["loss"]["lambda_mse"],
-                    bce_weight=cfg["loss"]["bce_weight"],
-                )
+
+            # Loss is computed OUTSIDE autocast, in float32: BCE-after-sigmoid is unsafe under
+            # autocast (raises RuntimeError), and MS-SSIM is more stable in fp32 anyway.
+            loss, parts = total_loss(
+                cover.float(), stego.float(), message.float(), recovered.float(),
+                lambda_perceptual=cfg["loss"]["lambda_perceptual"],
+                lambda_mse=cfg["loss"]["lambda_mse"],
+                bce_weight=cfg["loss"]["bce_weight"],
+            )
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)

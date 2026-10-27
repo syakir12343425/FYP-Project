@@ -1160,8 +1160,8 @@ input:checked + .slider:before {
 /* Scale selection cards */
 .scale-factor-selector {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 
 .scale-option {
@@ -1822,3 +1822,16 @@ body.hide-academic-figures .academic-caption {
   color: #444;
   margin-top: 4px;
 }
+
+/* ---- login gate ---- */
+.login-overlay { position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center;
+  background: rgba(2, 6, 23, 0.96); backdrop-filter: blur(6px); }
+.login-overlay.active { display: flex; }
+.login-card { width: min(380px, 92vw); padding: 28px; border-radius: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: #0f172a; border: 1px solid #334155; color: #e2e8f0; }
+.login-card h2 { margin: 0; }
+.login-sub { margin: 0 0 10px; font-size: 12px; color: #94a3b8; }
+.login-card label { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+.login-card input { padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #020617; color: #e2e8f0; }
+.login-error { min-height: 18px; font-size: 12px; color: #f43f5e; }
+.session-box { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; padding: 8px 0; }

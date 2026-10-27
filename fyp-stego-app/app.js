@@ -1,7 +1,105 @@
 /**
  * AI-Based Robust Steganography Against Image Downscaling Attacks
  * FYP Research UI - Core Application Logic
+ *
+ * This version is wired to the real inference server (server.py): the
+ * embed / downscale / extract steps call the trained CNN (and real LSB)
+ * over HTTP instead of simulating results client-side.
  */
+
+// Point this at wherever server.py is running (uvicorn server:app --port 8000).
+// Change to your VPS address once you deploy it there, e.g. "https://api.yourdomain.com".
+const API_BASE = "http://localhost:8000"; // use your HTTPS API domain on the VPS
+
+// Real aggregate numbers from the full eval.py benchmark
+// (100 validation images x 5 algorithms x 4 sizes), used as reference
+// values in the comparison table / report so the UI never shows invented numbers.
+const REFERENCE = {
+  cnn: { ber: 1.15, psnr: 32.13, ssim: 0.9514 },
+  lsb: { ber: 48.00, psnr: 79.99, ssim: 0.9999 },
+};
+
+
+// ------------------------------------------------------------------ auth
+// Access token lives ONLY in this JS variable (never localStorage -> not stealable via XSS storage reads).
+// The refresh token is an httpOnly+SameSite=Strict cookie the JS can't even see.
+let accessToken = null;
+let refreshTimer = null;
+
+function setSession(data) {
+  accessToken = data.access_token;
+  document.getElementById('current-user').innerText = data.username;
+  document.getElementById('login-overlay').classList.remove('active');
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(silentRefresh, Math.max(10, data.expires_in - 60) * 1000);
+}
+
+function clearSession() {
+  accessToken = null;
+  clearTimeout(refreshTimer);
+  document.getElementById('login-overlay').classList.add('active');
+}
+
+async function authPost(path, body) {
+  return fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+async function silentRefresh() {
+  try {
+    const res = await authPost("/api/auth/refresh");
+    if (!res.ok) throw new Error("refresh failed");
+    setSession(await res.json());
+    return true;
+  } catch (_) {
+    clearSession();
+    return false;
+  }
+}
+
+// fetch() wrapper for protected endpoints: attaches the bearer token, retries once after a refresh.
+async function apiFetch(path, options = {}) {
+  const run = () => fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { ...(options.headers || {}), "Authorization": `Bearer ${accessToken}` },
+  });
+  let res = await run();
+  if (res.status === 401 && await silentRefresh()) res = await run();
+  if (res.status === 401) throw new Error("Session expired - please log in again.");
+  if (res.status === 429) throw new Error("Too many requests - slow down and retry shortly.");
+  return res;
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-submit');
+  errEl.innerText = '';
+  btn.disabled = true;
+  try {
+    const res = await authPost("/api/auth/login", {
+      username: document.getElementById('login-username').value,
+      password: document.getElementById('login-password').value,
+    });
+    if (res.status === 429) throw new Error("Too many attempts. Wait a minute and try again.");
+    if (!res.ok) throw new Error("Invalid credentials, or account temporarily locked.");
+    document.getElementById('login-password').value = '';
+    setSession(await res.json());
+  } catch (err) {
+    errEl.innerText = err instanceof TypeError ? describeFetchError(err) : err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  try { await authPost("/api/auth/logout"); } catch (_) {}
+  clearSession();
+}
 
 // Application State
 const state = {
@@ -11,18 +109,20 @@ const state = {
   embedded: false,
   coverScene: 'lena', // 'lena', 'mandrill', 'satellite', 'medical'
   coverImgData: null,
-  
+
   // Embedding Results
   psnr: 0,
   ssim: 0,
   stegoImgData: null,
-  
+
   // Downscaling Attack parameters
   attackScale: 0.5,
   attackAlgo: 'bicubic',
   attackSimulated: false,
   downscaledImgData: null,
-  
+  stegoUploaded: false,      // stego image came from a file upload, not Module 2
+  downscaledUploaded: false, // image for extraction came from a file upload
+
   // Extraction parameters
   extracted: false,
   extractedMsg: '',
@@ -38,7 +138,7 @@ const elements = {
   viewports: document.querySelectorAll('.viewport'),
   toggleFigures: document.getElementById('toggle-figures'),
   toggleTheme: document.getElementById('toggle-theme'),
-  
+
   // Page 1: Embedding
   btnUseSample: document.getElementById('btn-use-sample'),
   btnTriggerUpload: document.getElementById('btn-trigger-upload'),
@@ -52,7 +152,7 @@ const elements = {
   btnEmbedPayload: document.getElementById('btn-embed-payload'),
   coverCanvas: document.getElementById('cover-canvas'),
   embeddingConsole: document.getElementById('embedding-console'),
-  
+
   // Page 2: Result
   btnModeSide: document.getElementById('btn-mode-side'),
   btnModeResidual: document.getElementById('btn-mode-residual'),
@@ -70,7 +170,7 @@ const elements = {
   methodTitleBadge: document.getElementById('method-title-badge'),
   methodDetailsText: document.getElementById('method-details-text'),
   cnnNetworkPreview: document.getElementById('cnn-network-preview'),
-  
+
   // Page 3: Downscaling
   miniStegoCanvas: document.getElementById('mini-stego-canvas'),
   stegoSourceStatus: document.getElementById('stego-source-status'),
@@ -86,7 +186,7 @@ const elements = {
   btnContinueToExtraction: document.getElementById('btn-continue-to-extraction'),
   mathExplanationText: document.getElementById('math-explanation-text'),
   downscaledCanvasContainer: document.getElementById('downscaled-canvas-container'),
-  
+
   // Page 4: Extraction
   miniDownscaledCanvas: document.getElementById('mini-downscaled-canvas'),
   downscaledImportStatus: document.getElementById('downscaled-import-status'),
@@ -102,7 +202,7 @@ const elements = {
   evaluationTableRows: document.getElementById('evaluation-table-rows'),
   btnExportReport: document.getElementById('btn-export-report'),
   extractedMsgLabel: document.getElementById('extracted-msg-label'),
-  
+
   // Modal Report
   reportModal: document.getElementById('report-modal'),
   btnCloseModal: document.getElementById('btn-close-modal'),
@@ -122,53 +222,46 @@ function drawProceduralImage(canvas, scene) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
-  
+
   ctx.clearRect(0, 0, w, h);
 
   if (scene === 'lena') {
     // Academic standard Lena lookalike: pinkish skin hues, feather/hat details
-    // Background gradient
     const bgGrad = ctx.createLinearGradient(0, 0, w, h);
     bgGrad.addColorStop(0, '#581c3f');
     bgGrad.addColorStop(0.5, '#701a35');
     bgGrad.addColorStop(1, '#9f1239');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
-    
-    // Smooth feather shape
+
     ctx.fillStyle = '#fda4af';
     ctx.beginPath();
     ctx.ellipse(w*0.35, h*0.5, w*0.3, h*0.2, Math.PI/4, 0, Math.PI*2);
     ctx.fill();
-    
-    // Skin Tone Face shapes
+
     ctx.fillStyle = '#fecdd3';
     ctx.beginPath();
     ctx.arc(w*0.5, h*0.45, w*0.18, 0, Math.PI*2);
     ctx.fill();
-    
-    // Eyes
+
     ctx.fillStyle = '#0f172a';
     ctx.beginPath();
     ctx.ellipse(w*0.46, h*0.43, w*0.02, h*0.01, 0, 0, Math.PI*2);
     ctx.ellipse(w*0.54, h*0.43, w*0.02, h*0.01, 0, 0, Math.PI*2);
     ctx.fill();
-    
-    // Lips
+
     ctx.fillStyle = '#be123c';
     ctx.beginPath();
     ctx.ellipse(w*0.5, h*0.53, w*0.03, h*0.01, 0, 0, Math.PI*2);
     ctx.fill();
-    
-    // Straw hat shape
+
     ctx.fillStyle = '#b45309';
     ctx.beginPath();
     ctx.moveTo(w*0.2, h*0.35);
     ctx.quadraticCurveTo(w*0.5, h*0.15, w*0.8, h*0.35);
     ctx.quadraticCurveTo(w*0.5, h*0.42, w*0.2, h*0.35);
     ctx.fill();
-    
-    // Feather highlights
+
     ctx.strokeStyle = '#ffe4e6';
     ctx.lineWidth = 1.5;
     for (let i = 0; i < 15; i++) {
@@ -177,14 +270,11 @@ function drawProceduralImage(canvas, scene) {
       ctx.quadraticCurveTo(w*0.3 + i*6, h*0.65, w*0.1 + i*5, h*0.8);
       ctx.stroke();
     }
-  } 
+  }
   else if (scene === 'mandrill') {
-    // Mandrill high texture: blue cheeks, yellow/white beard, high frequency noise
-    // Base brown face
     ctx.fillStyle = '#78350f';
     ctx.fillRect(0, 0, w, h);
-    
-    // Blue cheek pads (gradient)
+
     const cheekGrad = ctx.createLinearGradient(0, 0, w, 0);
     cheekGrad.addColorStop(0.2, '#0284c7');
     cheekGrad.addColorStop(0.5, '#0f172a');
@@ -193,8 +283,7 @@ function drawProceduralImage(canvas, scene) {
     ctx.beginPath();
     ctx.ellipse(w*0.5, h*0.55, w*0.35, h*0.2, 0, 0, Math.PI*2);
     ctx.fill();
-    
-    // White/yellow beard strokes (High frequency)
+
     ctx.strokeStyle = '#fef08a';
     ctx.lineWidth = 1;
     for (let i = 0; i < 400; i++) {
@@ -206,29 +295,25 @@ function drawProceduralImage(canvas, scene) {
       ctx.stroke();
     }
 
-    // Red nose ridge
     ctx.fillStyle = '#dc2626';
     ctx.fillRect(w*0.44, h*0.2, w*0.12, h*0.42);
 
-    // Deep eyes
     ctx.fillStyle = '#facc15';
     ctx.beginPath();
     ctx.arc(w*0.36, h*0.28, w*0.04, 0, Math.PI*2);
     ctx.arc(w*0.64, h*0.28, w*0.04, 0, Math.PI*2);
     ctx.fill();
-    
+
     ctx.fillStyle = '#000000';
     ctx.beginPath();
     ctx.arc(w*0.36, h*0.28, w*0.015, 0, Math.PI*2);
     ctx.arc(w*0.64, h*0.28, w*0.015, 0, Math.PI*2);
     ctx.fill();
-  } 
+  }
   else if (scene === 'satellite') {
-    // Dense structural grids, river path, agricultural fields
     ctx.fillStyle = '#1e3a1e';
     ctx.fillRect(0, 0, w, h);
-    
-    // Agricultural fields grid
+
     ctx.strokeStyle = '#4d7c0f';
     ctx.lineWidth = 1;
     for(let i=0; i<w; i+=32) {
@@ -239,8 +324,7 @@ function drawProceduralImage(canvas, scene) {
       ctx.moveTo(0, i); ctx.lineTo(w, i);
       ctx.stroke();
     }
-    
-    // Diverse field crops colors
+
     for(let r=0; r<16; r++) {
       for(let c=0; c<16; c++) {
         if((r+c) % 3 === 0) {
@@ -252,8 +336,7 @@ function drawProceduralImage(canvas, scene) {
         }
       }
     }
-    
-    // Curvy Blue River
+
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 14;
     ctx.lineCap = 'round';
@@ -261,34 +344,29 @@ function drawProceduralImage(canvas, scene) {
     ctx.moveTo(0, h*0.1);
     ctx.bezierCurveTo(w*0.3, h*0.2, w*0.4, h*0.8, w, h*0.6);
     ctx.stroke();
-    
-    // Main Roads
+
     ctx.strokeStyle = '#94a3b8';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(w*0.1, 0);
     ctx.lineTo(w*0.8, h);
     ctx.stroke();
-  } 
+  }
   else if (scene === 'medical') {
-    // Gray scale axial brain MRI outline and brain ventricles
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, w, h);
-    
-    // Skull (Greyscale gradient ring)
+
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 8;
     ctx.beginPath();
     ctx.ellipse(w*0.5, h*0.5, w*0.38, h*0.44, 0, 0, Math.PI*2);
     ctx.stroke();
-    
-    // Brain Tissue (Wavy convoluted gray shapes)
+
     ctx.fillStyle = '#475569';
     ctx.beginPath();
     ctx.ellipse(w*0.5, h*0.5, w*0.34, h*0.4, 0, 0, Math.PI*2);
     ctx.fill();
-    
-    // Lobes convolutions details
+
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 3;
     for(let i=0; i<18; i++) {
@@ -296,8 +374,7 @@ function drawProceduralImage(canvas, scene) {
       ctx.arc(w*0.5 + Math.cos(i) * w * 0.2, h*0.5 + Math.sin(i) * h * 0.25, w*0.08, 0, Math.PI);
       ctx.stroke();
     }
-    
-    // Internal ventricles (Butterfly shape, black/fluid)
+
     ctx.fillStyle = '#020617';
     ctx.beginPath();
     ctx.moveTo(w*0.5, h*0.35);
@@ -307,8 +384,7 @@ function drawProceduralImage(canvas, scene) {
     ctx.bezierCurveTo(w*0.6, h*0.5, w*0.6, h*0.38, w*0.5, h*0.35);
     ctx.closePath();
     ctx.fill();
-    
-    // Ventricle highlights
+
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -328,17 +404,16 @@ function writeLog(text, type = 'info') {
 function updatePayloadMetrics() {
   const text = elements.secretMessageInput.value;
   state.message = text;
-  
+
   const chars = text.length;
   const bits = chars * 8;
-  
+
   elements.charCounter.innerText = `${chars} / 120 chars`;
   elements.bitCounter.innerText = `${bits} bits`;
 }
 
 // SPA Routing
 function handleNavigation(targetId) {
-  // Update nav buttons active state
   elements.navButtons.forEach(btn => {
     if (btn.getAttribute('data-target') === targetId) {
       btn.classList.add('active');
@@ -347,7 +422,6 @@ function handleNavigation(targetId) {
     }
   });
 
-  // Toggle Viewports
   elements.viewports.forEach(vp => {
     if (vp.id === targetId) {
       vp.classList.add('active');
@@ -361,7 +435,7 @@ function handleNavigation(targetId) {
 function updateThreatVectorInfo() {
   const algo = state.attackAlgo;
   let explanation = '';
-  
+
   switch(algo) {
     case 'nearest':
       explanation = `<strong>Nearest Neighbor:</strong> resizes by rounding coordinates to the nearest pixel index: <code>f(x, y) = g(round(x/r), round(y/r))</code>. This completely drops 75% to 98% of rows and columns, leading to massive aliasing artifacts and absolute destruction of LSB bit patterns.`;
@@ -373,7 +447,7 @@ function updateThreatVectorInfo() {
       explanation = `<strong>Bicubic Interpolation:</strong> computes pixel values using a 4x4 coordinate neighborhood and cubic spline convolution: <code>W(x) = (a+2)|x|³ - (a+3)|x|² + 1</code>. Acts as an aggressive low-pass reconstruction filter, causing severe loss of spatial stego data.`;
       break;
     case 'lanczos':
-      explanation = `<strong>Lanczos Resampling:</strong> applies a windowed sinc kernel convolution filter: <code>L(x) = sinc(x)sinc(x/a)</code>. It models mathematical sinc filters to retain edge details, but the high-frequency pixel phase transitions holding steganographic arrays are still heavily degraded.`;
+      explanation = `<strong>Lanczos Resampling:</strong> applies a windowed sinc kernel convolution filter: <code>L(x) = sinc(x)sinc(x/a)</code>. Held out of CNN training entirely — used here as a zero-shot generalization test of the decoder.`;
       break;
     case 'area':
       explanation = `<strong>Area-Based Resampling:</strong> computes average value of pixels under a pixel mapping box. Acts as a box blur downsampler, neutralizing pixel-level variations.`;
@@ -382,367 +456,336 @@ function updateThreatVectorInfo() {
   elements.mathExplanationText.innerHTML = explanation;
 }
 
-// Generate Stego Image simulation (Injects simulated noise map / latent signatures)
-function runStegoPipeline() {
+// --------------------------------------------------------------- server utils
+
+// Draws a (possibly data:) image URL into a canvas, resizing the canvas to
+// match the image's natural dimensions. Returns a Promise so callers can await it.
+function drawDataUrlToCanvas(canvas, dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+// Builds the (S - C) x150 residual visualisation from two same-size canvases.
+function drawResidualMap(coverCanvas, stegoCanvas, outCanvas) {
+  const w = coverCanvas.width, h = coverCanvas.height;
+  outCanvas.width = w;
+  outCanvas.height = h;
+  const coverData = coverCanvas.getContext('2d').getImageData(0, 0, w, h);
+  const stegoData = stegoCanvas.getContext('2d').getImageData(0, 0, w, h);
+  const outCtx = outCanvas.getContext('2d');
+  const residual = outCtx.createImageData(w, h);
+  for (let i = 0; i < coverData.data.length; i += 4) {
+    residual.data[i]   = Math.min(255, Math.abs(stegoData.data[i]   - coverData.data[i])   * 150);
+    residual.data[i+1] = Math.min(255, Math.abs(stegoData.data[i+1] - coverData.data[i+1]) * 150);
+    residual.data[i+2] = Math.min(255, Math.abs(stegoData.data[i+2] - coverData.data[i+2]) * 150);
+    residual.data[i+3] = 255;
+  }
+  outCtx.putImageData(residual, 0, 0);
+}
+
+// Friendlier error if the server simply isn't running / unreachable.
+function describeFetchError(err) {
+  if (err instanceof TypeError) {
+    return `Can't reach the inference server at ${API_BASE}. Is server.py running (uvicorn server:app --port 8000)?`;
+  }
+  return err.message;
+}
+
+// ----------------------------------------------------------- real pipeline steps
+
+// Reads + validates an uploaded PNG/JPEG. Returns the ORIGINAL bytes as a data URL (not re-encoded via
+// canvas, which would silently alter pixels - important when testing Telegram/JPEG round-trips).
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error("No file selected."));
+    if (!["image/png", "image/jpeg"].includes(file.type)) return reject(new Error("Only PNG or JPEG images are accepted."));
+    if (file.size > 4 * 1024 * 1024) return reject(new Error("File too large (max 4 MB)."));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const img = new Image();
+      img.onerror = () => reject(new Error("Not a valid image."));
+      img.onload = () => {
+        const { naturalWidth: w, naturalHeight: h } = img;
+        if (w < 32 || h < 32 || w > 1280 || h > 1280) return reject(new Error(`Image is ${w}x${h}px; allowed range is 32-1280 px per side.`));
+        resolve({ dataUrl, w, h });
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function drawMini(canvas, source) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, 64, 64);
+}
+
+// Page 1 -> 2: calls POST /api/embed on the real trained CNN (or real LSB).
+async function runStegoPipeline() {
   if (state.message.trim() === '') {
     alert("Please enter a secret message payload before embedding.");
     return;
   }
 
-  writeLog("[SYSTEM] Initiating embedding thread...", "system");
+  writeLog("[SYSTEM] Initiating embedding request to inference server...", "system");
   elements.btnEmbedPayload.disabled = true;
   elements.btnEmbedPayload.innerText = "Processing Embedding...";
-  
-  // Create timeline simulations
-  setTimeout(() => {
-    writeLog("[INFO] Preprocessing cover pixel matrix (512x512x3)...", "info");
-  }, 300);
 
-  setTimeout(() => {
-    writeLog(`[INFO] Message byte representation converted to bitstream (${state.message.length * 8} bits).`, "info");
-  }, 700);
+  writeLog("[INFO] Preprocessing cover pixel matrix (512x512x3)...", "info");
+  writeLog(`[INFO] Message byte representation converted to bitstream (${state.message.length * 8} bits, padded to 1024).`, "info");
 
-  setTimeout(() => {
-    if (state.method === 'cnn') {
-      writeLog("[INFO] Executing ResNet-based Deep Encoder network...", "info");
-      writeLog("[INFO] Differentiable downscale training simulation active. Noise distribution matched.", "info");
-    } else {
-      writeLog("[INFO] Allocating Spatial LSB buffers...", "info");
-      writeLog("[INFO] Writing message bits to least-significant bit (8th bit plane).", "info");
-    }
-  }, 1100);
+  try {
+    const coverDataUrl = elements.coverCanvas.toDataURL('image/png');
 
-  setTimeout(() => {
-    // Generate results
+    writeLog(
+      state.method === 'cnn'
+        ? "[INFO] Running CNN Encoder (trained model, checkpoints/best.pt)..."
+        : "[INFO] Running spatial LSB embed (8th bit plane)...",
+      "info"
+    );
+
+    const res = await apiFetch("/api/embed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cover_image: coverDataUrl,
+        message: state.message,
+        method: state.method,
+      }),
+    });
+    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    const data = await res.json(); // { stego_image, psnr, ssim }
+
     state.embedded = true;
-    
-    // Copy cover canvas to result pages
-    const coverCtx = elements.coverCanvas.getContext('2d');
-    const w = elements.coverCanvas.width;
-    const h = elements.coverCanvas.height;
-    
-    const coverData = coverCtx.getImageData(0, 0, w, h);
-    
-    // Draw to Result original cover
-    const resCoverCtx = elements.resultCoverCanvas.getContext('2d');
-    resCoverCtx.putImageData(coverData, 0, 0);
-    
-    // Draw to Stego (simulate small modifications)
-    const resStegoCtx = elements.resultStegoCanvas.getContext('2d');
-    const stegoData = resCoverCtx.createImageData(w, h);
-    
-    // Populate Stego Data
-    for (let i = 0; i < coverData.data.length; i++) {
-      stegoData.data[i] = coverData.data[i];
-    }
-    
-    // We add slight alterations based on algorithm selected
-    const seedText = state.message;
+    state.stegoUploaded = false;
+    state.stegoImgData = data.stego_image;
+    state.psnr = data.psnr;
+    state.ssim = data.ssim;
+
+    await drawDataUrlToCanvas(elements.resultCoverCanvas, coverDataUrl);
+    await drawDataUrlToCanvas(elements.resultStegoCanvas, data.stego_image);
+    drawResidualMap(elements.resultCoverCanvas, elements.resultStegoCanvas, elements.resultResidualCanvas);
+
     if (state.method === 'lsb') {
-      // Classic spatial bits replacement: very tiny random changes on 1 pixel in 8
-      for (let i = 0; i < seedText.length * 8 * 4; i += 4) {
-        // alter R or G or B channel slightly
-        const targetIdx = Math.floor(Math.random() * (w * h)) * 4;
-        const channel = Math.floor(Math.random() * 3);
-        stegoData.data[targetIdx + channel] ^= 1; // Toggle LSB
-      }
-      state.psnr = 51.20 + (Math.random() * 0.6);
-      state.ssim = 0.9998;
-      
       elements.methodTitleBadge.innerText = "Spatial LSB Steganography";
       elements.methodDetailsText.innerText = "Least Significant Bit embedding injects message bitstream values directly into the lowest order bits of RGB color channels. While offering excellent image quality with close to zero visual distortions (high PSNR), it stores data in fragile pixel states that are easily destroyed by image scaling.";
-      elements.cnnNetworkPreview.style.display = 'none'; // Hide neural net diagram
+      elements.cnnNetworkPreview.style.display = 'none';
     } else {
-      // CNN Stego details: features are integrated globally using conv kernels, slightly more global variance
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = (y * w + x) * 4;
-          // Apply a gentle high frequency convolution overlay to mimic neural weight distribution
-          // Mostly visible on edges
-          const edgeFactor = Math.sin(x/5) * Math.cos(y/5);
-          if (Math.abs(edgeFactor) > 0.8) {
-            stegoData.data[idx] = Math.min(255, Math.max(0, stegoData.data[idx] + Math.floor(Math.random() * 3 - 1.5)));
-            stegoData.data[idx+1] = Math.min(255, Math.max(0, stegoData.data[idx+1] + Math.floor(Math.random() * 3 - 1.5)));
-            stegoData.data[idx+2] = Math.min(255, Math.max(0, stegoData.data[idx+2] + Math.floor(Math.random() * 3 - 1.5)));
-          }
-        }
-      }
-      state.psnr = 38.42 - (Math.random() * 0.4);
-      state.ssim = 0.9682 - (Math.random() * 0.002);
-      
       elements.methodTitleBadge.innerText = "CNN Encoder-Decoder Model";
       elements.methodDetailsText.innerText = "Using a deep convolutional neural network, the encoder has been optimized jointly with a differentiable downscale simulator. It hides secret payload bits inside complex textures and edge contours rather than plain pixels, providing high resistance to downscaling attacks.";
-      elements.cnnNetworkPreview.style.display = 'flex'; // Show neural net diagram
+      elements.cnnNetworkPreview.style.display = 'flex';
     }
-    
-    resStegoCtx.putImageData(stegoData, 0, 0);
-    
-    // Generate Residual noise map (S - C) x 150
-    const resResidualCtx = elements.resultResidualCanvas.getContext('2d');
-    const residualData = resResidualCtx.createImageData(w, h);
-    
-    for (let i = 0; i < coverData.data.length; i += 4) {
-      // calculate difference
-      const dR = Math.abs(stegoData.data[i] - coverData.data[i]) * 150;
-      const dG = Math.abs(stegoData.data[i+1] - coverData.data[i+1]) * 150;
-      const dB = Math.abs(stegoData.data[i+2] - coverData.data[i+2]) * 150;
-      
-      residualData.data[i] = dR;
-      residualData.data[i+1] = dG;
-      residualData.data[i+2] = dB;
-      residualData.data[i+3] = 255; // Alpha
-    }
-    resResidualCtx.putImageData(residualData, 0, 0);
-    
-    // Update metrics UI
+
     elements.metricPsnr.innerText = `${state.psnr.toFixed(2)} dB`;
     elements.metricSsim.innerText = state.ssim.toFixed(4);
-    
-    // Update gauge bars
     elements.psnrBar.style.width = `${Math.min(100, (state.psnr / 60) * 100)}%`;
     elements.ssimBar.style.width = `${state.ssim * 100}%`;
-    
-    // Enable other controls
+
     elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${state.method === 'cnn' ? 'Robust CNN' : 'Spatial LSB'}.`;
     elements.btnSimulateAttack.disabled = false;
-    
+
     writeLog(`[SUCCESS] Steganographic embedding complete. PSNR: ${state.psnr.toFixed(2)}dB, SSIM: ${state.ssim.toFixed(4)}`, "success");
-    
+
+    setTimeout(() => handleNavigation('page-result'), 400);
+  } catch (err) {
+    const msg = describeFetchError(err);
+    writeLog(`[ERROR] Embedding failed: ${msg}`, "error");
+    alert(`Embedding failed: ${msg}`);
+  } finally {
     elements.btnEmbedPayload.disabled = false;
     elements.btnEmbedPayload.innerText = "Embed Message";
-    
-    // Automatically route user to results page
-    setTimeout(() => {
-      handleNavigation('page-result');
-    }, 400);
-
-  }, 1600);
+  }
 }
 
-// Canvas-based resizing algorithms simulator (Nearest Neighbor, Bilinear, Bicubic, etc.)
-function runDownscalingAttack() {
-  if (!state.embedded) {
-    alert("Please perform the steganography embedding step in Module 1 first.");
+// Page 3: calls POST /api/downscale, which runs the exact OpenCV algorithm
+// (nearest/bilinear/bicubic/lanczos/area) used in eval.py.
+async function runDownscalingAttack() {
+  if (!state.stegoImgData) {
+    alert("Embed a message in Module 1, or upload a stego image here, first.");
     return;
   }
 
-  writeLog("[ATTACK] Initializing Downscaling Attack simulation...", "system");
+  writeLog("[ATTACK] Sending stego image to server for real downscale attack...", "system");
   elements.btnSimulateAttack.disabled = true;
   elements.btnSimulateAttack.innerText = "Resizing Stego Image...";
-  
-  // Set scale label on connection arrow
   elements.arrowScaleLabel.innerText = `${state.attackScale * 100}%`;
-  
-  // Copy stego image to attack input canvas
-  const stegoCtx = elements.resultStegoCanvas.getContext('2d');
-  const w = elements.resultStegoCanvas.width;
-  const h = elements.resultStegoCanvas.height;
-  const stegoData = stegoCtx.getImageData(0, 0, w, h);
-  
-  const attInCtx = elements.attackInputCanvas.getContext('2d');
-  attInCtx.putImageData(stegoData, 0, 0);
-  
-  // Set output canvas resolution according to scale
-  const outW = Math.floor(w * state.attackScale);
-  const outH = Math.floor(h * state.attackScale);
-  elements.attackOutputCanvas.width = outW;
-  elements.attackOutputCanvas.height = outH;
-  
-  // Adjust output canvas wrapper css sizing to visualize quality loss/aliasing
-  elements.attackOutputCanvas.style.width = '100%';
-  
-  const attOutCtx = elements.attackOutputCanvas.getContext('2d');
-  
-  // Progress bar animation
-  let prog = 0;
-  const interval = setInterval(() => {
-    prog += 10;
-    elements.attackProgressFill.style.width = `${prog}%`;
-    elements.progressPercentage.innerText = `${prog}%`;
-    
-    if (prog === 20) {
-      elements.progressStatusText.innerText = "Sampling original stego matrices...";
-    } else if (prog === 50) {
-      elements.progressStatusText.innerText = `Running ${state.attackAlgo.toUpperCase()} interpolation kernel...`;
-    } else if (prog === 80) {
-      elements.progressStatusText.innerText = "Reconstructing downsampled coordinates...";
-    }
-    
-    if (prog >= 100) {
-      clearInterval(interval);
-      
-      // Perform ACTUAL canvas image scaling based on algorithm selected
-      attOutCtx.clearRect(0, 0, outW, outH);
-      
-      if (state.attackAlgo === 'nearest') {
-        // Manual nearest neighbor to show hard pixelated edges
-        attOutCtx.imageSmoothingEnabled = false;
-        attOutCtx.drawImage(elements.attackInputCanvas, 0, 0, w, h, 0, 0, outW, outH);
-      } else {
-        // High quality bilinear/bicubic/lanczos simulation using canvas interpolation
-        attOutCtx.imageSmoothingEnabled = true;
-        attOutCtx.imageSmoothingQuality = (state.attackAlgo === 'bilinear') ? 'medium' : 'high';
-        attOutCtx.drawImage(elements.attackInputCanvas, 0, 0, w, h, 0, 0, outW, outH);
-      }
-      
-      // Save attack output state
-      state.attackSimulated = true;
-      elements.btnContinueToExtraction.disabled = false;
-      elements.btnContinueToExtraction.classList.remove('disabled');
-      elements.progressStatusText.innerText = "Attack completed successfully.";
-      
-      // Update Page 4 import status
-      elements.downscaledImportStatus.innerText = `Attacked image loaded (${outW}x${outH}px). Ready.`;
-      
-      // Copy to mini canvases
-      const miniCtx = elements.miniDownscaledCanvas.getContext('2d');
-      elements.miniDownscaledCanvas.width = 64;
-      elements.miniDownscaledCanvas.height = 64;
-      miniCtx.drawImage(elements.attackOutputCanvas, 0, 0, outW, outH, 0, 0, 64, 64);
-      
-      writeLog(`[SUCCESS] Resizing attack complete. Rescaled to ${outW}x${outH} px using ${state.attackAlgo}.`, "success");
-      elements.btnSimulateAttack.disabled = false;
-      elements.btnSimulateAttack.innerText = "Simulate Downscaling Attack";
-    }
-  }, 150);
+
+  await drawDataUrlToCanvas(elements.attackInputCanvas, state.stegoImgData);
+
+  elements.progressStatusText.innerText = `Running ${state.attackAlgo.toUpperCase()} interpolation kernel on server...`;
+  elements.attackProgressFill.style.width = `40%`;
+  elements.progressPercentage.innerText = `40%`;
+
+  try {
+    const res = await apiFetch("/api/downscale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: state.stegoImgData,
+        algorithm: state.attackAlgo,
+        scale: state.attackScale,
+      }),
+    });
+    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    const data = await res.json(); // { downscaled_image, size }
+
+    state.downscaledImgData = data.downscaled_image;
+    state.downscaledUploaded = false;
+    state.attackSimulated = true;
+
+    await drawDataUrlToCanvas(elements.attackOutputCanvas, data.downscaled_image);
+
+    elements.attackProgressFill.style.width = `100%`;
+    elements.progressPercentage.innerText = `100%`;
+    elements.progressStatusText.innerText = "Attack completed successfully.";
+
+    elements.btnContinueToExtraction.disabled = false;
+    elements.btnContinueToExtraction.classList.remove('disabled');
+
+    elements.downscaledImportStatus.innerText = `Attacked image loaded (${data.size}x${data.size}px). Ready.`;
+
+    const miniCtx = elements.miniDownscaledCanvas.getContext('2d');
+    elements.miniDownscaledCanvas.width = 64;
+    elements.miniDownscaledCanvas.height = 64;
+    miniCtx.drawImage(elements.attackOutputCanvas, 0, 0, data.size, data.size, 0, 0, 64, 64);
+
+    writeLog(`[SUCCESS] Real ${state.attackAlgo} resize complete via OpenCV. Output: ${data.size}x${data.size}px.`, "success");
+  } catch (err) {
+    const msg = describeFetchError(err);
+    writeLog(`[ERROR] Downscale attack failed: ${msg}`, "error");
+    alert(`Downscale attack failed: ${msg}`);
+  } finally {
+    elements.btnSimulateAttack.disabled = false;
+    elements.btnSimulateAttack.innerText = "Simulate Downscaling Attack";
+  }
 }
 
-// Extraction Module Simulator
-function runExtractionAndEvaluation() {
-  if (!state.attackSimulated) {
-    alert("Please simulate the downscaling attack in Module 3 first.");
+// Page 4: calls POST /api/extract, running the real decoder (or real LSB
+// extraction) on the actually-downscaled image, and gets a real BER back
+// by comparing against the original message bits.
+async function runExtractionAndEvaluation() {
+  if (!state.downscaledImgData) {
+    alert("Run the attack in Module 3, or upload an image on this page, first.");
     return;
   }
+
+  state.method = document.getElementById('extract-method').value;
+  const expected = document.getElementById('expected-msg-input').value;
 
   elements.btnExtractMessage.disabled = true;
   elements.btnExtractMessage.innerText = "Decrypting Payload...";
-  
-  setTimeout(() => {
+  elements.displayOriginalMsg.innerText = expected || "(unknown - extracting blind)";
+
+  try {
+    // Send the original cover too, so the server can report a real
+    // PSNR/SSIM "after a resize round-trip" (downscaled image upscaled
+    // back to 512x512 purely for this comparison — the decoder above never
+    // sees this upscaled copy, only the real downscaled one).
+    // Only send the cover when the image really came from this session's pipeline; an uploaded
+    // image has no matching cover, and comparing against a blank canvas would give fake PSNR/SSIM.
+    const useCover = state.embedded && !state.downscaledUploaded && !state.stegoUploaded;
+    const coverDataUrl = useCover ? elements.resultCoverCanvas.toDataURL('image/png') : "";
+
+    const res = await apiFetch("/api/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: state.downscaledImgData,
+        method: state.method,
+        original_message: expected,
+        cover_image: coverDataUrl,
+      }),
+    });
+    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    const data = await res.json(); // { recovered_message, ber, extracted_psnr, extracted_ssim }
+
     state.extracted = true;
-    
-    // Update original text display
-    elements.displayOriginalMsg.innerText = state.message;
-    
-    // Simulate Decryption BER and text corruptions
-    let rawBer = 0.00;
-    let textOut = '';
-    
+    const berKnown = data.ber !== null && data.ber !== undefined;
+    state.ber = berKnown ? data.ber * 100 : null;
+
+    elements.displayExtractedMsg.innerText = data.recovered_message;
+    elements.extractBer.innerText = berKnown ? `${state.ber.toFixed(2)} %` : 'N/A (no expected message)';
+
     if (state.method === 'lsb') {
-      // LSB is highly fragile to resizing!
-      // Scale Factor determines corruption level
-      if (state.attackScale === 0.5) {
-        rawBer = 32.41;
-        // corrupt ~ 30% of characters
-        textOut = corruptMessageText(state.message, 0.3);
-      } else if (state.attackScale === 0.25) {
-        rawBer = 46.18;
-        // corrupt ~ 75% of characters
-        textOut = corruptMessageText(state.message, 0.75);
-      } else {
-        rawBer = 49.82;
-        // pure noise
-        textOut = corruptMessageText(state.message, 0.95);
-      }
-      
       elements.berStatusIndicator.className = "m-indicator red";
-      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [CORRUPTED / LSB]";
+      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [LSB]";
     } else {
-      // CNN Robust model!
-      if (state.attackScale === 0.5) {
-        rawBer = 0.00;
-        textOut = state.message; // Perfect match
-      } else if (state.attackScale === 0.25) {
-        rawBer = 0.00;
-        textOut = state.message; // Perfect match
-      } else {
-        rawBer = 1.84;
-        // minor typo (1 or 2 characters)
-        textOut = corruptMessageText(state.message, 0.05);
-      }
-      
-      elements.berStatusIndicator.className = "m-indicator green";
-      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [100% SECURE / CNN]";
+      elements.berStatusIndicator.className = !berKnown ? "m-indicator" : (state.ber < 5 ? "m-indicator green" : "m-indicator red");
+      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [CNN]";
     }
-    
-    state.ber = rawBer;
-    elements.displayExtractedMsg.innerText = textOut;
-    elements.extractBer.innerText = `${state.ber.toFixed(2)} %`;
-    
-    // Set extracted image quality simulation metrics
-    // Resize yields low resolution metrics relative to original cover
-    state.extractedPsnr = 10 + (Math.random() * 3); // low due to grid shape shrinkage
-    state.extractedSsim = 0.3 + (Math.random() * 0.15);
-    
-    elements.extractPsnr.innerText = `${state.extractedPsnr.toFixed(2)} dB`;
-    elements.extractSsim.innerText = state.extractedSsim.toFixed(4);
-    
-    // Update comparison benchmark table dynamically depending on current selection
-    updateBenchmarkTable();
-    
-    // Update academic report summary paragraph
-    updateAcademicSummaryParagraph();
-    
+
+    // Real PSNR/SSIM: cover vs. (the actual downscaled image, upscaled back
+    // to 512x512 for this comparison only). Computed server-side with the
+    // same skimage functions eval.py uses, so it's a genuine measurement,
+    // not an invented number — and it will legitimately read lower than
+    // Page 2's embedding-time PSNR/SSIM, because it also reflects the
+    // quality lost to the downscale+upscale round trip, not just embedding.
+    state.extractedPsnr = data.extracted_psnr;
+    state.extractedSsim = data.extracted_ssim;
+    elements.extractPsnr.innerText = data.extracted_psnr != null ? `${data.extracted_psnr.toFixed(2)} dB` : 'N/A';
+    elements.extractSsim.innerText = data.extracted_ssim != null ? data.extracted_ssim.toFixed(4) : 'N/A';
+
+    if (berKnown) {
+      updateBenchmarkTable();
+      updateAcademicSummaryParagraph();
+    }
+
+    writeLog(`[SUCCESS] Extraction complete via server. BER: ${berKnown ? state.ber.toFixed(2) + '%' : 'n/a'}`, "success");
+  } catch (err) {
+    const msg = describeFetchError(err);
+    writeLog(`[ERROR] Extraction failed: ${msg}`, "error");
+    alert(`Extraction failed: ${msg}`);
+  } finally {
     elements.btnExtractMessage.disabled = false;
     elements.btnExtractMessage.innerText = "Extract Hidden Message";
-    
-  }, 1000);
-}
-
-// Corrupts string characters with random bits/glyphs based on corruption percentage
-function corruptMessageText(text, probability) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+=[]{}';
-  let out = '';
-  for (let i = 0; i < text.length; i++) {
-    if (Math.random() < probability) {
-      // corrupt character (sometimes replace with random glyph, sometimes space)
-      if (Math.random() < 0.2) {
-        out += ' ';
-      } else {
-        out += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-    } else {
-      out += text.charAt(i);
-    }
   }
-  return out;
 }
 
-// Dynamically updates comparison benchmark table rows based on current state variables
+// Dynamically updates comparison benchmark table: row 1 is the live run that
+// just happened (real numbers from the server), row 2 is the other method's
+// real aggregate average from the full eval.py benchmark (REFERENCE above).
 function updateBenchmarkTable() {
   const scalePct = `${state.attackScale * 100}%`;
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
-  
-  // Construct rows: LSB vs CNN under current attack parameters
-  let lsbBer = 32.41;
-  let lsbPsnr = 12.18;
-  let lsbSsim = 0.4851;
-  
-  let cnnBer = 0.00;
-  let cnnPsnr = 31.45;
-  let cnnSsim = 0.9104;
-  
-  if (state.attackScale === 0.25) {
-    lsbBer = 46.18; lsbPsnr = 9.04; lsbSsim = 0.2982;
-    cnnBer = 0.00; cnnPsnr = 28.52; cnnSsim = 0.8653;
-  } else if (state.attackScale === 0.125) {
-    lsbBer = 49.82; lsbPsnr = 6.42; lsbSsim = 0.1142;
-    cnnBer = 1.84; cnnPsnr = 24.15; cnnSsim = 0.7915;
-  }
-  
+
+  const liveLabel = state.method === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
+  const liveClass = state.method === 'cnn' ? 'cnn-cell' : 'lsb-cell';
+  const liveValClass = state.ber < 10 ? 'better-val' : 'worse-val';
+
+  const otherMethod = state.method === 'cnn' ? 'lsb' : 'cnn';
+  const otherLabel = otherMethod === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
+  const otherClass = otherMethod === 'cnn' ? 'cnn-cell' : 'lsb-cell';
+  const otherValClass = otherMethod === 'cnn' ? 'better-val' : 'worse-val';
+  const ref = REFERENCE[otherMethod];
+
   elements.evaluationTableRows.innerHTML = `
     <tr>
-      <td class="method-cell lsb-cell">LSB (Standard)</td>
+      <td class="method-cell ${liveClass}">${liveLabel} — this run</td>
       <td>${scalePct} (${algoName})</td>
-      <td class="worse-val">${lsbBer.toFixed(2)}%</td>
-      <td>${lsbPsnr.toFixed(2)} dB</td>
-      <td>${lsbSsim.toFixed(4)}</td>
+      <td class="${liveValClass}">${state.ber.toFixed(2)}%</td>
+      <td>${state.psnr.toFixed(2)} dB</td>
+      <td>${state.ssim.toFixed(4)}</td>
     </tr>
     <tr>
-      <td class="method-cell cnn-cell">CNN (Deep/Robust)</td>
-      <td>${scalePct} (${algoName})</td>
-      <td class="better-val">${cnnBer.toFixed(2)}%</td>
-      <td>${cnnPsnr.toFixed(2)} dB</td>
-      <td>${cnnSsim.toFixed(4)}</td>
+      <td class="method-cell ${otherClass}">${otherLabel} — benchmark avg</td>
+      <td>all algorithms, all sizes</td>
+      <td class="${otherValClass}">${ref.ber.toFixed(2)}%</td>
+      <td>${ref.psnr.toFixed(2)} dB</td>
+      <td>${ref.ssim.toFixed(4)}</td>
     </tr>
   `;
 }
@@ -751,20 +794,19 @@ function updateBenchmarkTable() {
 function updateAcademicSummaryParagraph() {
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
   const scalePct = `${state.attackScale * 100}%`;
-  
+
   let summary = '';
   if (state.method === 'lsb') {
     summary = `Under standard spatial LSB embedding, downscaling filters cause destructive spatial coordinate interpolations. Applying a <strong>${scalePct} ${algoName} Resizing</strong> attack resulted in an unrecoverable <strong>${state.ber.toFixed(2)}% Bit Error Rate (BER)</strong>. This confirms that classical pixel-replacement steganography lacks any defensive capacity against spatial modifications.`;
   } else {
-    summary = `The deep CNN Encoder-Decoder model successfully bypassed the <strong>${scalePct} ${algoName} Resizing</strong> attack, yielding a highly robust <strong>${state.ber.toFixed(2)}% Bit Error Rate (BER)</strong>. The decoder reconstructs the secret message perfectly because information was distributed globally within structural coefficients optimized by the differentiable layer.`;
+    summary = `The deep CNN Encoder-Decoder model was tested against the <strong>${scalePct} ${algoName} Resizing</strong> attack, yielding a <strong>${state.ber.toFixed(2)}% Bit Error Rate (BER)</strong>. The decoder reconstructs the secret message with high fidelity because information was distributed globally within structural coefficients optimized by the differentiable downscale layer during training.`;
   }
   elements.evaluationSummaryText.innerHTML = summary;
 }
 
 // Initialize Application Events
 function initApp() {
-  
-  // Navigation tabs routing
+
   elements.navButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.getAttribute('data-target');
@@ -772,7 +814,6 @@ function initApp() {
     });
   });
 
-  // Settings: Toggle Academic Figure Captions
   elements.toggleFigures.addEventListener('change', (e) => {
     if (e.target.checked) {
       document.body.classList.remove('hide-academic-figures');
@@ -781,7 +822,6 @@ function initApp() {
     }
   });
 
-  // Settings: Toggle Theme light/dark
   elements.toggleTheme.addEventListener('change', (e) => {
     if (e.target.checked) {
       document.body.className = 'dark-theme';
@@ -790,26 +830,22 @@ function initApp() {
     }
   });
 
-  // Page 1: Sample select thumbnails
   elements.sampleThumbButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       elements.sampleThumbButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      
+
       const sampleType = btn.getAttribute('data-sample');
       state.coverScene = sampleType;
       state.coverLoaded = true;
-      
-      // Redraw cover canvas
+
       drawProceduralImage(elements.coverCanvas, sampleType);
       writeLog(`[INFO] Loaded sample cover image scene: '${sampleType.toUpperCase()}'`, "info");
     });
   });
 
-  // Page 1: Secret Message character limits counter
   elements.secretMessageInput.addEventListener('input', updatePayloadMetrics);
 
-  // Page 1: Embed method toggle cards
   elements.methodCards.forEach(card => {
     const radio = card.querySelector('input[type="radio"]');
     card.addEventListener('click', () => {
@@ -821,27 +857,24 @@ function initApp() {
     });
   });
 
-  // Page 1: File Uploader handlers
   elements.btnTriggerUpload.addEventListener('click', () => {
     elements.coverFileInput.click();
   });
-  
+
   elements.coverFileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Select thumbnail visual updates
+
     elements.sampleThumbButtons.forEach(b => b.classList.remove('active'));
     elements.btnUseSample.classList.remove('active');
     elements.btnTriggerUpload.classList.add('active');
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
         const ctx = elements.coverCanvas.getContext('2d');
         ctx.clearRect(0, 0, 512, 512);
-        // Draw fitting boundaries
         ctx.drawImage(img, 0, 0, 512, 512);
         state.coverLoaded = true;
         state.coverScene = 'Uploaded File';
@@ -851,29 +884,28 @@ function initApp() {
     };
     reader.readAsDataURL(file);
   });
-  
+
   elements.btnUseSample.addEventListener('click', () => {
     elements.btnTriggerUpload.classList.remove('active');
     elements.btnUseSample.classList.add('active');
-    // Default back to selected sample active button
     const activeThumb = document.querySelector('.sample-thumb-btn.active');
     if (activeThumb) activeThumb.click();
   });
 
-  // Page 1: Reset Button
   elements.btnResetEmbedding.addEventListener('click', () => {
     elements.secretMessageInput.value = "Deep Steganography hides messages within image features, maintaining robustness against Downscaling Attacks.";
     updatePayloadMetrics();
-    // Reset to default sample Lena
     const thumbLena = document.querySelector('.sample-thumb-btn[data-sample="lena"]');
     if (thumbLena) thumbLena.click();
     writeLog("[SYSTEM] Configuration settings reset to academic defaults.", "system");
   });
 
-  // Page 1: Embed Message button trigger
   elements.btnEmbedPayload.addEventListener('click', runStegoPipeline);
 
-  // Page 2: Comparison Mode selectors
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('btn-logout').addEventListener('click', handleLogout);
+  silentRefresh();   // restore the session after a page reload (uses the httpOnly cookie)
+
   elements.btnModeSide.addEventListener('click', () => {
     elements.btnModeSide.classList.add('active');
     elements.btnModeResidual.classList.remove('active');
@@ -888,7 +920,6 @@ function initApp() {
     elements.residualMapView.classList.add('active');
   });
 
-  // Page 2: Download stego file simulation
   elements.btnDownloadStego.addEventListener('click', () => {
     const dataUrl = elements.resultStegoCanvas.toDataURL('image/png');
     const link = document.createElement('a');
@@ -897,14 +928,11 @@ function initApp() {
     link.click();
   });
 
-  // Page 2: Proceed shortcut
   elements.btnGoToDownscaling.addEventListener('click', () => {
-    // Import values automatically
     elements.btnImportLatest.click();
     handleNavigation('page-downscaling');
   });
 
-  // Page 3: Import stego action
   elements.btnImportLatest.addEventListener('click', () => {
     if (!state.embedded) {
       alert("No stego image has been embedded yet. Please complete Module 1 and 2.");
@@ -912,41 +940,36 @@ function initApp() {
     }
     const miniCtx = elements.miniStegoCanvas.getContext('2d');
     miniCtx.clearRect(0, 0, 64, 64);
-    miniCtx.drawImage(elements.resultStegoCanvas, 0, 0, 512, 512, 0, 0, 64, 64);
-    
-    // Copy main preview
+    miniCtx.drawImage(elements.resultStegoCanvas, 0, 0, elements.resultStegoCanvas.width, elements.resultStegoCanvas.height, 0, 0, 64, 64);
+
     const attInCtx = elements.attackInputCanvas.getContext('2d');
+    elements.attackInputCanvas.width = elements.resultStegoCanvas.width;
+    elements.attackInputCanvas.height = elements.resultStegoCanvas.height;
     attInCtx.drawImage(elements.resultStegoCanvas, 0, 0);
-    
+
     elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${state.method === 'cnn' ? 'Robust CNN' : 'Spatial LSB'}.`;
-    
+
     writeLog("[INFO] Imported latest stego output image as attack simulator source.", "info");
   });
 
-  // Page 3: Dropdown change triggers text formula details updates
   elements.downscaleAlgorithm.addEventListener('change', (e) => {
     state.attackAlgo = e.target.value;
     updateThreatVectorInfo();
   });
 
-  // Page 3: Scale radio buttons selection
   document.querySelectorAll('input[name="scale-factor"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       state.attackScale = parseFloat(e.target.value);
     });
   });
 
-  // Page 3: Simulate Attack button
   elements.btnSimulateAttack.addEventListener('click', runDownscalingAttack);
 
-  // Page 3: Proceed shortcut to extraction
   elements.btnContinueToExtraction.addEventListener('click', () => {
-    // Import automatically
     elements.btnImportAttacked.click();
     handleNavigation('page-extraction');
   });
 
-  // Page 4: Import attacked image action
   elements.btnImportAttacked.addEventListener('click', () => {
     if (!state.attackSimulated) {
       alert("No downscaled image has been simulated. Please run Module 3.");
@@ -955,60 +978,86 @@ function initApp() {
     const miniCtx = elements.miniDownscaledCanvas.getContext('2d');
     miniCtx.clearRect(0, 0, 64, 64);
     miniCtx.drawImage(elements.attackOutputCanvas, 0, 0, elements.attackOutputCanvas.width, elements.attackOutputCanvas.height, 0, 0, 64, 64);
-    
+
     elements.downscaledImportStatus.innerText = `Attacked image loaded (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height}px). Ready.`;
   });
 
-  // Page 4: Extract hidden payload trigger
   elements.btnExtractMessage.addEventListener('click', runExtractionAndEvaluation);
 
-  // Page 4: Export report modal
+  // keep the Page-4 decoder dropdown and expected-message box in sync with earlier steps
+  document.getElementById('extract-method').addEventListener('change', (e) => { state.method = e.target.value; });
+  elements.methodCards.forEach(card => card.addEventListener('click', () => {
+    document.getElementById('extract-method').value = state.method;
+  }));
+  elements.btnEmbedPayload.addEventListener('click', () => {
+    document.getElementById('expected-msg-input').value = state.message;
+  });
+
+  // ---- upload your own image (e.g. one received over Telegram) ----
+  document.getElementById('btn-upload-stego').addEventListener('click', () => document.getElementById('stego-file-input').click());
+  document.getElementById('stego-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    try {
+      const { dataUrl, w, h } = await readImageFile(file);
+      state.stegoImgData = dataUrl;
+      state.stegoUploaded = true;
+      await drawDataUrlToCanvas(elements.attackInputCanvas, dataUrl);
+      drawMini(elements.miniStegoCanvas, elements.attackInputCanvas);
+      elements.stegoSourceStatus.innerText = `Uploaded image loaded (${w}x${h}px).`;
+      elements.btnSimulateAttack.disabled = false;
+      writeLog(`[INFO] Stego image uploaded from file (${w}x${h}px).`, "info");
+    } catch (err) { alert(err.message); }
+  });
+
+  document.getElementById('btn-upload-attacked').addEventListener('click', () => document.getElementById('attacked-file-input').click());
+  document.getElementById('attacked-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    try {
+      const { dataUrl, w, h } = await readImageFile(file);
+      state.downscaledImgData = dataUrl;
+      state.downscaledUploaded = true;
+      state.attackSimulated = true;
+      await drawDataUrlToCanvas(elements.attackOutputCanvas, dataUrl);
+      drawMini(elements.miniDownscaledCanvas, elements.attackOutputCanvas);
+      elements.downscaledImportStatus.innerText = `Uploaded image loaded (${w}x${h}px). Ready.`;
+      writeLog(`[INFO] Image for extraction uploaded from file (${w}x${h}px).`, "info");
+    } catch (err) { alert(err.message); }
+  });
+
   elements.btnExportReport.addEventListener('click', () => {
-    // Populate report meta data values dynamically
     elements.reportDate.innerText = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     elements.reportCoverName.innerText = `${state.coverScene.toUpperCase()} (512x512 px)`;
     elements.reportMsgLen.innerText = `${state.message.length} characters (${state.message.length * 8} bits)`;
-    
+
     const scalePct = `${state.attackScale * 100}%`;
     const algoName = elements.downscaleAlgorithm.options[elements.downscaleAlgorithm.selectedIndex].text;
-    
+
     elements.reportTableAlgo.innerText = algoName;
     elements.reportTableScale.innerText = `${scalePct} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)`;
-    
-    // Simulate benchmark values
-    let lsbBer = 32.41;
-    let cnnBer = 0.00;
-    if (state.attackScale === 0.25) {
-      lsbBer = 46.18; cnnBer = 0.00;
-    } else if (state.attackScale === 0.125) {
-      lsbBer = 49.82; cnnBer = 1.84;
-    }
-    
-    elements.reportLsbBer.innerText = `${lsbBer.toFixed(2)}%`;
-    elements.reportCnnBer.innerText = `${cnnBer.toFixed(2)}%`;
-    
+
+    elements.reportLsbBer.innerText = `${REFERENCE.lsb.ber.toFixed(2)}%`;
+    elements.reportCnnBer.innerText = `${REFERENCE.cnn.ber.toFixed(2)}%`;
+
     elements.reportModal.classList.add('active');
   });
 
-  // Modal actions
   elements.btnCloseModal.addEventListener('click', () => {
     elements.reportModal.classList.remove('active');
   });
-  
+
   elements.btnDismissModal.addEventListener('click', () => {
     elements.reportModal.classList.remove('active');
   });
 
   elements.btnPrintDocument.addEventListener('click', () => {
-    // Standard print window simulation for saving as PDF
     window.print();
   });
 
-  // Initialize Canvas Scenes
   drawProceduralImage(elements.coverCanvas, 'lena');
   updatePayloadMetrics();
   updateThreatVectorInfo();
 }
 
-// Start application when DOM loads
 window.addEventListener('DOMContentLoaded', initApp);

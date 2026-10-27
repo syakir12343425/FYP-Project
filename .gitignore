@@ -7,3 +7,5 @@ data/
 results/
 *.pt
 .ipynb_checkpoints/
+.env
+*.db

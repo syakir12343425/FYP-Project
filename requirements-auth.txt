@@ -1,0 +1,6 @@
+sqlalchemy>=2.0
+psycopg2-binary
+bcrypt
+PyJWT
+slowapi
+python-dotenv

@@ -39,6 +39,17 @@ class DIV2KStegoDataset(Dataset):
         return len(self.paths)
 
     def __getitem__(self, idx):
+        # Robustness: a truncated/missing file (e.g. flaky Drive mount) must not kill a multi-hour
+        # run. Skip to the next image; give up only if many consecutive files fail.
+        for attempt in range(10):
+            try:
+                return self._load(idx)
+            except (OSError, FileNotFoundError) as e:
+                print(f"[dataset] skipping {self.paths[idx].name}: {e}")
+                idx = (idx + 1) % len(self.paths)
+        raise RuntimeError("10 consecutive unreadable images - check the dataset folder / Drive mount")
+
+    def _load(self, idx):
         img = Image.open(self.paths[idx]).convert("RGB")
         w, h = img.size
         cs = self.crop_size

@@ -8,6 +8,20 @@
 </head>
 <body class="dark-theme">
 
+  <!-- LOGIN GATE: nothing in the app works without a valid session -->
+  <div class="login-overlay active" id="login-overlay">
+    <form class="login-card" id="login-form" autocomplete="on">
+      <h2>RobustStego AI</h2>
+      <p class="login-sub">Authorised access only. Actions are audit-logged.</p>
+      <label for="login-username">Username</label>
+      <input id="login-username" type="text" autocomplete="username" maxlength="64" required>
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" maxlength="128" required>
+      <div class="login-error" id="login-error" role="alert"></div>
+      <button type="submit" class="btn btn-primary w-full" id="login-submit">Sign in</button>
+    </form>
+  </div>
+
   <!-- Main Grid Layout -->
   <div class="app-container">
 
@@ -78,6 +92,11 @@
           <p class="supervisor">Supervisor: Dr. Syaril Nizam Omar</p>
         </div>
         
+        <div class="session-box">
+          <span>Signed in as <strong id="current-user">-</strong></span>
+          <button type="button" class="btn-small" id="btn-logout">Log out</button>
+        </div>
+
         <!-- Toggle Controls -->
         <div class="control-panel">
           <div class="toggle-group">
@@ -432,6 +451,8 @@
                       <span id="stego-source-status">No stego image generated yet.</span>
                     </div>
                     <button type="button" class="btn-small" id="btn-import-latest">Import From Module 2</button>
+                    <button type="button" class="btn-small" id="btn-upload-stego">Upload Image</button>
+                    <input type="file" id="stego-file-input" accept="image/png,image/jpeg" style="display: none;">
                   </div>
                 </div>
 
@@ -449,10 +470,28 @@
                   </div>
                 </div>
 
-                <!-- Select Scale Factor -->
+                <!-- Select Scale Factor: restricted to the exact sizes eval.py
+                     actually benchmarked (config.yaml downscale.train_sizes =
+                     224/256/299/384px, i.e. 44%/50%/58%/75% of the 512px crop).
+                     No "beyond tested range" options — every result shown here
+                     is backed by real evaluation data. -->
                 <div class="form-section">
-                  <label class="section-label">Scale Factor</label>
+                  <label class="section-label">Scale Factor (benchmarked sizes only)</label>
                   <div class="scale-factor-selector">
+                    <label class="scale-option">
+                      <input type="radio" name="scale-factor" value="0.75">
+                      <div class="scale-box">
+                        <span class="percentage">75%</span>
+                        <span class="dimensions">384 &times; 384 px</span>
+                      </div>
+                    </label>
+                    <label class="scale-option">
+                      <input type="radio" name="scale-factor" value="0.58398438">
+                      <div class="scale-box">
+                        <span class="percentage">58%</span>
+                        <span class="dimensions">299 &times; 299 px</span>
+                      </div>
+                    </label>
                     <label class="scale-option">
                       <input type="radio" name="scale-factor" value="0.5" checked>
                       <div class="scale-box">
@@ -461,17 +500,10 @@
                       </div>
                     </label>
                     <label class="scale-option">
-                      <input type="radio" name="scale-factor" value="0.25">
+                      <input type="radio" name="scale-factor" value="0.4375">
                       <div class="scale-box">
-                        <span class="percentage">25%</span>
-                        <span class="dimensions">128 &times; 128 px</span>
-                      </div>
-                    </label>
-                    <label class="scale-option">
-                      <input type="radio" name="scale-factor" value="0.125">
-                      <div class="scale-box">
-                        <span class="percentage">12.5%</span>
-                        <span class="dimensions">64 &times; 64 px</span>
+                        <span class="percentage">44%</span>
+                        <span class="dimensions">224 &times; 224 px</span>
                       </div>
                     </label>
                   </div>
@@ -604,6 +636,20 @@
                     <span id="downscaled-import-status">No downscaled image imported.</span>
                   </div>
                   <button type="button" class="btn-small" id="btn-import-attacked">Import Attacked Image</button>
+                  <button type="button" class="btn-small" id="btn-upload-attacked">Upload Image</button>
+                  <input type="file" id="attacked-file-input" accept="image/png,image/jpeg" style="display: none;">
+                </div>
+
+                <div class="form-section">
+                  <label class="section-label" for="extract-method">Decoder to use</label>
+                  <select id="extract-method" class="form-control">
+                    <option value="cnn" selected>CNN Decoder (Robust)</option>
+                    <option value="lsb">LSB Extraction (Standard)</option>
+                  </select>
+                </div>
+                <div class="form-section">
+                  <label class="section-label" for="expected-msg-input">Expected message (optional &mdash; only needed to calculate BER)</label>
+                  <input type="text" id="expected-msg-input" class="form-control" maxlength="120" placeholder="Leave empty to extract blind">
                 </div>
 
                 <div class="form-actions-bar">
@@ -678,9 +724,12 @@
               </div>
               <div class="card-body benchmark-body">
                 
-                <!-- SVG-based line chart comparing LSB vs CNN BER at different scales -->
+                <!-- SVG-based line chart comparing LSB vs CNN BER at different scales.
+                     Real averages from eval_summary.csv (100 images x 5 algorithms,
+                     averaged per size) — NOT the 50/25/12.5% buttons on Page 3, which
+                     were never actually benchmarked (see caption below). -->
                 <div class="chart-container">
-                  <span class="chart-title">Bit Error Rate (BER) vs. Downscaling Factor (%)</span>
+                  <span class="chart-title">Bit Error Rate (BER) vs. Downscale Size (full eval.py benchmark)</span>
                   <div class="svg-chart-wrapper" id="svg-chart-wrapper">
                     <svg viewBox="0 0 450 220" width="100%" height="100%">
                       <!-- Grid lines -->
@@ -689,42 +738,47 @@
                       <line x1="50" y1="110" x2="420" y2="110" stroke="#334155" stroke-dasharray="2 2" />
                       <line x1="50" y1="155" x2="420" y2="155" stroke="#334155" stroke-dasharray="2 2" />
                       <line x1="50" y1="180" x2="420" y2="180" stroke="#475569" stroke-width="1.5" />
-                      
+
                       <!-- Vertical axes -->
                       <line x1="50" y1="20" x2="50" y2="180" stroke="#475569" stroke-width="1.5" />
-                      
+
                       <!-- Axis Y Labels -->
                       <text x="40" y="24" fill="#94a3b8" font-size="9" text-anchor="end">50%</text>
                       <text x="40" y="69" fill="#94a3b8" font-size="9" text-anchor="end">35%</text>
                       <text x="40" y="114" fill="#94a3b8" font-size="9" text-anchor="end">20%</text>
                       <text x="40" y="159" fill="#94a3b8" font-size="9" text-anchor="end">5%</text>
                       <text x="40" y="184" fill="#94a3b8" font-size="9" text-anchor="end">0%</text>
-                      
-                      <!-- Axis X Labels -->
-                      <text x="110" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">50% Scale</text>
-                      <text x="235" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">25% Scale</text>
-                      <text x="360" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">12.5% Scale</text>
 
-                      <text x="235" y="215" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle">Downscaling Resizing Scale</text>
+                      <!-- Axis X Labels: the 4 sizes eval.py actually tested (384,299,256,224px = 75%,58%,50%,44% of the 512px crop) -->
+                      <text x="100" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">75% (384px)</text>
+                      <text x="210" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">58% (299px)</text>
+                      <text x="300" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">50% (256px)</text>
+                      <text x="390" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">44% (224px)</text>
+
+                      <text x="235" y="215" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle">Downscale Size Tested (% of 512px crop)</text>
                       <text x="15" y="100" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate(-90 15 100)">BER (%)</text>
-                      
-                      <!-- LSB Plot Line (Magenta) -->
-                      <polyline points="50,180 110,75 235,32 360,21" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-                      <circle cx="110" cy="75" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
-                      <circle cx="235" cy="32" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
-                      <circle cx="360" cy="21" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
-                      <text x="120" y="72" fill="#f43f5e" font-size="8" font-weight="bold">LSB (32.4%)</text>
-                      <text x="245" y="29" fill="#f43f5e" font-size="8" font-weight="bold">LSB (46.1%)</text>
-                      <text x="370" y="18" fill="#f43f5e" font-size="8" font-weight="bold">LSB (49.8%)</text>
 
-                      <!-- CNN Plot Line (Emerald/Cyan) -->
-                      <polyline points="50,180 110,180 235,180 360,174" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-                      <circle cx="110" cy="180" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
-                      <circle cx="235" cy="180" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
-                      <circle cx="360" cy="174" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
-                      <text x="120" y="174" fill="#10b981" font-size="8" font-weight="bold">CNN (0.0%)</text>
-                      <text x="245" y="174" fill="#10b981" font-size="8" font-weight="bold">CNN (0.0%)</text>
-                      <text x="345" y="165" fill="#10b981" font-size="8" font-weight="bold">CNN (1.8%)</text>
+                      <!-- LSB Plot Line (Magenta) — real avg BER per size across all 5 algorithms -->
+                      <polyline points="50,180 100,38 210,23 300,37 390,22" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                      <circle cx="100" cy="38" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="210" cy="23" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="300" cy="37" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="390" cy="22" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+                      <text x="70" y="33" fill="#f43f5e" font-size="8" font-weight="bold">LSB (44.3%)</text>
+                      <text x="180" y="18" fill="#f43f5e" font-size="8" font-weight="bold">LSB (49.2%)</text>
+                      <text x="270" y="50" fill="#f43f5e" font-size="8" font-weight="bold">LSB (44.7%)</text>
+                      <text x="330" y="18" fill="#f43f5e" font-size="8" font-weight="bold">LSB (49.4%)</text>
+
+                      <!-- CNN Plot Line (Emerald/Cyan) — real avg BER per size across all 5 algorithms -->
+                      <polyline points="50,180 100,177 210,176 300,176 390,176" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                      <circle cx="100" cy="177" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="210" cy="176" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="300" cy="176" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <circle cx="390" cy="176" r="5" fill="#10b981" stroke="#0f172a" stroke-width="2" />
+                      <text x="70" y="170" fill="#10b981" font-size="8" font-weight="bold">CNN (1.04%)</text>
+                      <text x="180" y="168" fill="#10b981" font-size="8" font-weight="bold">CNN (1.18%)</text>
+                      <text x="270" y="168" fill="#10b981" font-size="8" font-weight="bold">CNN (1.19%)</text>
+                      <text x="355" y="168" fill="#10b981" font-size="8" font-weight="bold">CNN (1.27%)</text>
                     </svg>
                   </div>
                   <!-- Legend -->
@@ -732,6 +786,12 @@
                     <span class="legend-item"><span class="legend-color lsb"></span>LSB Spatial Steganography</span>
                     <span class="legend-item"><span class="legend-color cnn"></span>CNN Encoder-Decoder (Differentiable Layer)</span>
                   </div>
+                  <p class="residual-desc" style="margin-top:10px;">
+                    Averaged from the real 100-image &times; 5-algorithm eval.py benchmark (eval_summary.csv).
+                    Note: these are the only sizes actually tested &mdash; Page 3's 50% / 25% / 12.5% scale
+                    buttons let you try more aggressive downscaling live, but results there (especially
+                    below ~44%) go beyond what this benchmark or training ever covered.
+                  </p>
                 </div>
 
                 <!-- Comparison Table -->
