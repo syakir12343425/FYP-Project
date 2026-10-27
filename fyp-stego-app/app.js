@@ -431,15 +431,32 @@ function updatePayloadMetrics() {
   elements.bitCounter.innerText = `${bits} / 1024 bits`;
 }
 
+function applyTheme(theme) {
+  document.body.classList.toggle('dark-theme', theme === 'dark');
+  document.body.classList.toggle('light-theme', theme === 'light');
+  elements.toggleTheme.checked = theme === 'dark';
+  try { localStorage.setItem('theme', theme); } catch (_) { /* theme preference only */ }
+}
+
 // SPA Routing
+const PAGE_ORDER = ['page-embedding', 'page-result', 'page-downscaling', 'page-extraction'];
+
 function handleNavigation(targetId) {
   elements.navButtons.forEach(btn => {
     if (btn.getAttribute('data-target') === targetId) {
       btn.classList.add('active');
+      btn.setAttribute('aria-current', 'step');
+      // Top bar mirrors the active step (label text comes from the nav itself).
+      const label = btn.querySelector('.step-label');
+      document.getElementById('topbar-heading').textContent = label ? label.textContent : '';
+      document.getElementById('topbar-step').textContent =
+        `Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
     } else {
       btn.classList.remove('active');
+      btn.removeAttribute('aria-current');
     }
   });
+  updateStepProgress();
 
   elements.viewports.forEach(vp => {
     if (vp.id === targetId) {
@@ -450,26 +467,48 @@ function handleNavigation(targetId) {
   });
 }
 
-// Differentiable downscaling simulation math labels
+// Tick completed workflow steps in the sidebar. Purely visual: derived from existing state,
+// never blocks navigation (uploads let you start at any step).
+function updateStepProgress() {
+  const done = {
+    'page-embedding': state.embedded || state.stegoUploaded,
+    'page-result': state.embedded,
+    'page-downscaling': state.attackSimulated,
+    'page-extraction': state.extracted,
+  };
+  elements.navButtons.forEach(btn => {
+    btn.classList.toggle('done', Boolean(done[btn.getAttribute('data-target')]));
+  });
+  const chip = document.getElementById('topbar-method');
+  if (chip) chip.textContent = state.method === 'lsb' ? 'LSB' : 'CNN';
+}
+
+// Button labels live in a <span> so changing the text never deletes the icon.
+function setBtnLabel(btn, text) {
+  const span = btn.querySelector('span');
+  if (span) span.textContent = text; else btn.textContent = text;
+}
+
+// Plain-language explanation of the selected resize algorithm
 function updateThreatVectorInfo() {
   const algo = state.attackAlgo;
   let explanation = '';
 
   switch(algo) {
     case 'nearest':
-      explanation = `<strong>Nearest Neighbor:</strong> resizes by rounding coordinates to the nearest pixel index: <code>f(x, y) = g(round(x/r), round(y/r))</code>. This completely drops 75% to 98% of rows and columns, leading to massive aliasing artifacts and absolute destruction of LSB bit patterns.`;
+      explanation = `<strong>Nearest Neighbor:</strong> resizes by rounding coordinates to the nearest pixel index: <code>f(x, y) = g(round(x/r), round(y/r))</code>. At the tested sizes (44%&ndash;75%) it simply skips 25%&ndash;56% of rows and columns. No averaging happens, so it causes aliasing, and the skipped pixels' bits are gone.`;
       break;
     case 'bilinear':
       explanation = `<strong>Bilinear Interpolation:</strong> performs 2D linear filtering using a 2x2 local pixel neighborhood: <code>W(x) = max(0, 1 - |x|)</code>. The resulting pixels are averages of adjacent locations, blurring away high-frequency spatial bits.`;
       break;
     case 'bicubic':
-      explanation = `<strong>Bicubic Interpolation:</strong> computes pixel values using a 4x4 coordinate neighborhood and cubic spline convolution: <code>W(x) = (a+2)|x|³ - (a+3)|x|² + 1</code>. Acts as an aggressive low-pass reconstruction filter, causing severe loss of spatial stego data.`;
+      explanation = `<strong>Bicubic Interpolation:</strong> computes pixel values using a 4x4 coordinate neighborhood and cubic spline convolution: <code>W(x) = (a+2)|x|³ - (a+3)|x|² + 1</code>. Each output pixel is a weighted blend of 16 inputs, which smooths away pixel-level detail such as LSB bits.`;
       break;
     case 'lanczos':
-      explanation = `<strong>Lanczos Resampling:</strong> applies a windowed sinc kernel convolution filter: <code>L(x) = sinc(x)sinc(x/a)</code>. Held out of CNN training entirely — used here as a zero-shot generalization test of the decoder.`;
+      explanation = `<strong>Lanczos Resampling:</strong> applies a windowed sinc kernel convolution filter: <code>L(x) = sinc(x)sinc(x/a)</code>. Held out of CNN training entirely, so it tests whether the decoder generalises to an unseen resize.`;
       break;
     case 'area':
-      explanation = `<strong>Area-Based Resampling:</strong> computes average value of pixels under a pixel mapping box. Acts as a box blur downsampler, neutralizing pixel-level variations.`;
+      explanation = `<strong>Area-Based Resampling:</strong> computes average value of pixels under a pixel mapping box. This averages neighbouring pixels like a box blur, which removes pixel-level variations.`;
       break;
   }
   elements.mathExplanationText.innerHTML = explanation;
@@ -562,7 +601,7 @@ async function runStegoPipeline() {
 
   writeLog("[SYSTEM] Initiating embedding request to inference server...", "system");
   elements.btnEmbedPayload.disabled = true;
-  elements.btnEmbedPayload.innerText = "Processing Embedding...";
+  setBtnLabel(elements.btnEmbedPayload, "Embedding…");
 
   writeLog("[INFO] Preprocessing cover pixel matrix (512x512x3)...", "info");
   writeLog(`[INFO] Message byte representation converted to bitstream (${utf8Bytes(state.message) * 8} bits, padded to 1024 and whitened).`, "info");
@@ -590,6 +629,7 @@ async function runStegoPipeline() {
     const data = await res.json(); // { stego_image, psnr, ssim }
 
     state.embedded = true;
+    updateStepProgress();
     state.stegoUploaded = false;
     state.stegoImgData = data.stego_image;
     state.psnr = data.psnr;
@@ -626,7 +666,7 @@ async function runStegoPipeline() {
     alert(`Embedding failed: ${msg}`);
   } finally {
     elements.btnEmbedPayload.disabled = false;
-    elements.btnEmbedPayload.innerText = "Embed Message";
+    setBtnLabel(elements.btnEmbedPayload, "Embed message");
   }
 }
 
@@ -640,7 +680,7 @@ async function runDownscalingAttack() {
 
   writeLog("[ATTACK] Sending stego image to server for real downscale attack...", "system");
   elements.btnSimulateAttack.disabled = true;
-  elements.btnSimulateAttack.innerText = "Resizing Stego Image...";
+  setBtnLabel(elements.btnSimulateAttack, "Resizing…");
   elements.arrowScaleLabel.innerText = `${Math.round(state.attackScale * 100)}%`;
 
   await drawDataUrlToCanvas(elements.attackInputCanvas, state.stegoImgData);
@@ -665,6 +705,7 @@ async function runDownscalingAttack() {
     state.downscaledImgData = data.downscaled_image;
     state.downscaledUploaded = false;
     state.attackSimulated = true;
+    updateStepProgress();
 
     await drawDataUrlToCanvas(elements.attackOutputCanvas, data.downscaled_image);
 
@@ -689,7 +730,7 @@ async function runDownscalingAttack() {
     alert(`Downscale attack failed: ${msg}`);
   } finally {
     elements.btnSimulateAttack.disabled = false;
-    elements.btnSimulateAttack.innerText = "Simulate Downscaling Attack";
+    setBtnLabel(elements.btnSimulateAttack, "Run downscaling attack");
   }
 }
 
@@ -707,7 +748,7 @@ async function runExtractionAndEvaluation() {
   const expected = document.getElementById('expected-msg-input').value.replace(/\r\n/g, '\n');
 
   elements.btnExtractMessage.disabled = true;
-  elements.btnExtractMessage.innerText = "Decrypting Payload...";
+  setBtnLabel(elements.btnExtractMessage, "Decoding…");
   elements.displayOriginalMsg.innerText = expected || "(unknown - extracting blind)";
 
   try {
@@ -734,6 +775,7 @@ async function runExtractionAndEvaluation() {
     const data = await res.json(); // { recovered_message, ber, extracted_psnr, extracted_ssim }
 
     state.extracted = true;
+    updateStepProgress();
     const berKnown = data.ber !== null && data.ber !== undefined;
     state.ber = berKnown ? data.ber * 100 : null;
 
@@ -743,10 +785,10 @@ async function runExtractionAndEvaluation() {
 
     if (state.method === 'lsb') {
       elements.berStatusIndicator.className = "m-indicator red";
-      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [LSB]";
+      elements.extractedMsgLabel.innerText = "Recovered message (LSB decoder)";
     } else {
       elements.berStatusIndicator.className = !berKnown ? "m-indicator" : (state.ber <= THRESHOLDS.ber ? "m-indicator green" : "m-indicator red");
-      elements.extractedMsgLabel.innerText = "Recovered Text (M') - [CNN]";
+      elements.extractedMsgLabel.innerText = "Recovered message (CNN decoder)";
     }
 
     // Real PSNR/SSIM: cover vs. (the actual downscaled image, upscaled back
@@ -772,7 +814,7 @@ async function runExtractionAndEvaluation() {
     alert(`Extraction failed: ${msg}`);
   } finally {
     elements.btnExtractMessage.disabled = false;
-    elements.btnExtractMessage.innerText = "Extract Hidden Message";
+    setBtnLabel(elements.btnExtractMessage, "Extract hidden message");
   }
 }
 
@@ -854,13 +896,10 @@ function initApp() {
     }
   });
 
-  elements.toggleTheme.addEventListener('change', (e) => {
-    if (e.target.checked) {
-      document.body.className = 'dark-theme';
-    } else {
-      document.body.className = 'light-theme';
-    }
-  });
+  elements.toggleTheme.addEventListener('change', (e) => applyTheme(e.target.checked ? 'dark' : 'light'));
+  let savedTheme = null;
+  try { savedTheme = localStorage.getItem('theme'); } catch (_) { /* storage blocked: use default */ }
+  if (savedTheme === 'light' || savedTheme === 'dark') applyTheme(savedTheme);
 
   elements.sampleThumbButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -885,6 +924,7 @@ function initApp() {
       card.classList.add('active');
       radio.checked = true;
       state.method = radio.value;
+      updateStepProgress();
       writeLog(`[INFO] Active steganography algorithm changed to: ${state.method.toUpperCase()}`, "info");
     });
   });
@@ -1034,6 +1074,7 @@ function initApp() {
       const { dataUrl, w, h } = await readImageFile(file);
       state.stegoImgData = dataUrl;
       state.stegoUploaded = true;
+      updateStepProgress();
       await drawDataUrlToCanvas(elements.attackInputCanvas, dataUrl);
       drawMini(elements.miniStegoCanvas, elements.attackInputCanvas);
       elements.stegoSourceStatus.innerText = `Uploaded image loaded (${w}x${h}px).`;
@@ -1051,6 +1092,7 @@ function initApp() {
       state.downscaledImgData = dataUrl;
       state.downscaledUploaded = true;
       state.attackSimulated = true;
+      updateStepProgress();
       await drawDataUrlToCanvas(elements.attackOutputCanvas, dataUrl);
       drawMini(elements.miniDownscaledCanvas, elements.attackOutputCanvas);
       elements.downscaledImportStatus.innerText = `Uploaded image loaded (${w}x${h}px). Ready.`;
@@ -1105,6 +1147,7 @@ function initApp() {
   drawProceduralImage(elements.coverCanvas, 'lena');
   updatePayloadMetrics();
   updateThreatVectorInfo();
+  updateStepProgress();
 }
 
 window.addEventListener('DOMContentLoaded', initApp);
