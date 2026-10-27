@@ -19,6 +19,15 @@ const REFERENCE = {
   lsb: { ber: 48.00, psnr: 79.99, ssim: 0.9999 },
 };
 
+// Per-size averages from eval_summary.csv (mean over 100 images x 5 algorithms). These are the
+// exact values the old static chart showed; the chart and size table are now drawn from here.
+const BENCHMARK_BY_SIZE = {
+  sizes:  [384, 299, 256, 224],
+  scales: [0.75, 0.58398438, 0.5, 0.4375],   // must match the Page 3 radio values
+  cnn:    [1.04, 1.18, 1.19, 1.27],
+  lsb:    [44.3, 49.2, 44.7, 49.4],
+};
+
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
 // The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
 const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
@@ -749,7 +758,7 @@ async function runExtractionAndEvaluation() {
 
   elements.btnExtractMessage.disabled = true;
   setBtnLabel(elements.btnExtractMessage, "Decoding…");
-  elements.displayOriginalMsg.innerText = expected || "(unknown - extracting blind)";
+  elements.displayOriginalMsg.textContent = expected || "(not given - extracting blind)";
 
   try {
     // Send the original cover too, so the server can report a real
@@ -779,17 +788,11 @@ async function runExtractionAndEvaluation() {
     const berKnown = data.ber !== null && data.ber !== undefined;
     state.ber = berKnown ? data.ber * 100 : null;
 
-    elements.displayExtractedMsg.innerText = data.recovered_message;
     state.recoveredExact = expected ? data.recovered_message === expected : null;
-    elements.extractBer.innerText = berKnown ? `${state.ber.toFixed(2)} %` : 'N/A (no expected message)';
-
-    if (state.method === 'lsb') {
-      elements.berStatusIndicator.className = "m-indicator red";
-      elements.extractedMsgLabel.innerText = "Recovered message (LSB decoder)";
-    } else {
-      elements.berStatusIndicator.className = !berKnown ? "m-indicator" : (state.ber <= THRESHOLDS.ber ? "m-indicator green" : "m-indicator red");
-      elements.extractedMsgLabel.innerText = "Recovered message (CNN decoder)";
-    }
+    renderMessageDiff(expected, data.recovered_message);
+    updateBerHero(berKnown);
+    elements.extractedMsgLabel.innerText =
+      state.method === 'lsb' ? "Recovered message (LSB decoder)" : "Recovered message (CNN decoder)";
 
     // Real PSNR/SSIM: cover vs. (the actual downscaled image, upscaled back
     // to 512x512 for this comparison only). Computed server-side with the
@@ -802,8 +805,9 @@ async function runExtractionAndEvaluation() {
     elements.extractPsnr.innerText = data.extracted_psnr != null ? `${data.extracted_psnr.toFixed(2)} dB` : 'N/A';
     elements.extractSsim.innerText = data.extracted_ssim != null ? data.extracted_ssim.toFixed(4) : 'N/A';
 
+    updateBenchmarkTable();
+    renderBenchmarkChart();
     if (berKnown) {
-      updateBenchmarkTable();
       updateAcademicSummaryParagraph();
     }
 
@@ -818,39 +822,164 @@ async function runExtractionAndEvaluation() {
   }
 }
 
-// Dynamically updates comparison benchmark table: row 1 is the live run that
-// just happened (real numbers from the server), row 2 is the other method's
-// real aggregate average from the full eval.py benchmark (REFERENCE above).
+// Comparison table. Before an extraction it shows the two benchmark rows; afterwards the first row
+// is this run (server numbers) and the second is the OTHER method's benchmark average (REFERENCE).
 function updateBenchmarkTable() {
-  const scalePct = `${Math.round(state.attackScale * 100)}%`;
-  const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
-
-  const liveLabel = state.method === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
-  const liveClass = state.method === 'cnn' ? 'cnn-cell' : 'lsb-cell';
-  const liveValClass = state.ber <= THRESHOLDS.ber ? 'better-val' : 'worse-val';
-
-  const otherMethod = state.method === 'cnn' ? 'lsb' : 'cnn';
-  const otherLabel = otherMethod === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
-  const otherClass = otherMethod === 'cnn' ? 'cnn-cell' : 'lsb-cell';
-  const otherValClass = otherMethod === 'cnn' ? 'better-val' : 'worse-val';
-  const ref = REFERENCE[otherMethod];
-
-  elements.evaluationTableRows.innerHTML = `
-    <tr>
-      <td class="method-cell ${liveClass}">${liveLabel} — this run</td>
-      <td>${scalePct} (${algoName})</td>
-      <td class="${liveValClass}">${state.ber.toFixed(2)}%</td>
-      <td>${state.psnr.toFixed(2)} dB</td>
-      <td>${state.ssim.toFixed(4)}</td>
-    </tr>
-    <tr>
-      <td class="method-cell ${otherClass}">${otherLabel} — benchmark avg</td>
-      <td>all 5 algorithms, 224&ndash;384 px</td>
-      <td class="${otherValClass}">${ref.ber.toFixed(2)}%</td>
+  const fmtBer = (v) => `${v.toFixed(2)}%`;
+  const verdict = (v) => (v <= THRESHOLDS.ber ? 'better-val' : 'worse-val');
+  const name = (m) => (m === 'cnn' ? 'CNN' : 'LSB');
+  const benchRow = (m) => {
+    const ref = REFERENCE[m];
+    return `<tr>
+      <td><span class="method-cell ${m}-cell">${name(m)}</span><span class="cell-sub">benchmark average</span></td>
+      <td class="${verdict(ref.ber)}">${fmtBer(ref.ber)}</td>
       <td>${ref.psnr.toFixed(2)} dB</td>
       <td>${ref.ssim.toFixed(4)}</td>
-    </tr>
-  `;
+    </tr>`;
+  };
+
+  if (!state.extracted || state.ber === null) {
+    elements.evaluationTableRows.innerHTML = benchRow('cnn') + benchRow('lsb');
+    return;
+  }
+
+  // Embedding PSNR/SSIM exist only if the embed step ran in this session on this image.
+  const embeddedHere = state.embedded && !state.stegoUploaded && !state.downscaledUploaded;
+  const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
+  const attack = state.downscaledUploaded
+    ? 'uploaded image'
+    : `${Math.round(state.attackScale * 100)}% ${algoName}`;
+  const other = state.method === 'cnn' ? 'lsb' : 'cnn';
+
+  elements.evaluationTableRows.innerHTML = `<tr class="run-row">
+      <td><span class="method-cell ${state.method}-cell">${name(state.method)}</span><span class="cell-sub">this run &middot; ${attack}</span></td>
+      <td class="${verdict(state.ber)}">${fmtBer(state.ber)}</td>
+      <td>${embeddedHere ? `${state.psnr.toFixed(2)} dB` : '--'}</td>
+      <td>${embeddedHere ? state.ssim.toFixed(4) : '--'}</td>
+    </tr>` + benchRow(state.method) + benchRow(other);
+}
+
+// Headline BER card. States: idle (nothing yet), na (no expected message), pass, fail.
+function updateBerHero(berKnown) {
+  const card = document.getElementById('card-ber');
+  const verdictEl = document.getElementById('ber-verdict');
+  const bitsEl = document.getElementById('ber-bits');
+  if (!berKnown) {
+    card.dataset.state = 'na';
+    elements.extractBer.textContent = 'N/A';
+    bitsEl.textContent = '';
+    verdictEl.textContent = 'Enter the expected message to measure BER.';
+    elements.berStatusIndicator.className = 'm-indicator';
+    return;
+  }
+  const pass = state.ber <= THRESHOLDS.ber;
+  card.dataset.state = pass ? 'pass' : 'fail';
+  elements.extractBer.textContent = `${state.ber.toFixed(2)}%`;
+  // BER = wrong bits / 1024, so this count is exact, not an estimate.
+  bitsEl.textContent = `${Math.round(state.ber * 1024 / 100)} of 1024 bits wrong`;
+  verdictEl.textContent = pass ? `Within the ${THRESHOLDS.ber}% target` : `Above the ${THRESHOLDS.ber}% target`;
+  elements.berStatusIndicator.className = pass ? 'm-indicator green' : 'm-indicator red';
+}
+
+// Character-by-character comparison. Recovered text comes from the server/image and is untrusted,
+// so it is rendered ONLY through textContent (never innerHTML).
+function renderMessageDiff(expected, recovered) {
+  const out = elements.displayExtractedMsg;
+  const summary = document.getElementById('diff-summary');
+  out.textContent = '';
+  if (!expected) {
+    out.textContent = recovered || '(empty)';
+    summary.hidden = true;
+    return;
+  }
+  const exp = [...expected];
+  const rec = [...recovered];
+  let wrong = 0;
+  const n = Math.max(exp.length, rec.length);
+  for (let i = 0; i < n; i++) {
+    const span = document.createElement('span');
+    if (i >= rec.length) {             // decoder stopped early (a corrupted byte became the terminator)
+      span.textContent = '\u00b7';
+      span.className = 'diff-missing';
+      span.title = 'missing';
+      wrong++;
+    } else {
+      span.textContent = rec[i];
+      if (i >= exp.length || rec[i] !== exp[i]) { span.className = 'diff-bad'; wrong++; }
+    }
+    out.appendChild(span);
+  }
+  const correct = exp.length - Math.min(wrong, exp.length);
+  summary.hidden = false;
+  summary.dataset.state = wrong === 0 ? 'pass' : 'fail';
+  const padNote = state.ber > 0
+    ? ` The ${Math.round(state.ber * 1024 / 100)} wrong bits fell in the unused padding after the message.` : '';
+  summary.textContent = wrong === 0
+    ? `Exact match: all ${exp.length} characters recovered.${padNote}`
+    : `${correct} of ${exp.length} characters match. Wrong characters are highlighted; dots mark characters that were not recovered.`;
+}
+
+// Benchmark chart (SVG built with DOM APIs; colours come from CSS classes so both themes work).
+function renderBenchmarkChart() {
+  const host = document.getElementById('svg-chart-wrapper');
+  const NS = 'http://www.w3.org/2000/svg';
+  const W = 460, H = 230, L = 44, R = 16, T = 14, B = 40;
+  const yMax = 55;
+  const xs = BENCHMARK_BY_SIZE.sizes.map((_, i) => L + 40 + i * ((W - L - R - 80) / 3));
+  const y = (v) => T + (H - T - B) * (1 - Math.min(v, yMax) / yMax);
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img',
+    'aria-label': 'Benchmark BER per output size. CNN about 1.0 to 1.3 percent, LSB about 44 to 49 percent.' });
+
+  [0, 10, 20, 30, 40, 50].forEach(v => {
+    svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v === 0 ? 'chart-axis' : 'chart-grid' }));
+    svg.appendChild(el('text', { x: L - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'chart-tick' }, `${v}%`));
+  });
+  // target line
+  svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(THRESHOLDS.ber), y2: y(THRESHOLDS.ber), class: 'chart-target' }));
+
+  BENCHMARK_BY_SIZE.sizes.forEach((px, i) => {
+    svg.appendChild(el('text', { x: xs[i], y: H - B + 18, 'text-anchor': 'middle', class: 'chart-tick' }, `${px} px`));
+    svg.appendChild(el('text', { x: xs[i], y: H - B + 32, 'text-anchor': 'middle', class: 'chart-tick chart-tick-sub' },
+      `${Math.round(BENCHMARK_BY_SIZE.scales[i] * 100)}%`));
+  });
+
+  for (const m of ['lsb', 'cnn']) {
+    const pts = BENCHMARK_BY_SIZE[m].map((v, i) => `${xs[i]},${y(v)}`).join(' ');
+    svg.appendChild(el('polyline', { points: pts, class: `series-line series-${m}` }));
+    BENCHMARK_BY_SIZE[m].forEach((v, i) => {
+      const dot = el('circle', { cx: xs[i], cy: y(v), r: 4, class: `series-dot series-${m}` });
+      dot.appendChild(el('title', {}, `${m.toUpperCase()} at ${BENCHMARK_BY_SIZE.sizes[i]} px: ${v}%`));
+      svg.appendChild(dot);
+    });
+  }
+
+  // this run (only when the attack size is known, i.e. the attack ran in this session)
+  const idx = BENCHMARK_BY_SIZE.scales.indexOf(state.attackScale);
+  const showRun = state.extracted && state.ber !== null && !state.downscaledUploaded && idx >= 0;
+  document.getElementById('run-legend').hidden = !showRun;
+  if (showRun) {
+    const pass = state.ber <= THRESHOLDS.ber;
+    const cx = xs[idx], cy = y(state.ber);
+    svg.appendChild(el('circle', { cx, cy, r: 8, class: `run-marker ${pass ? 'pass' : 'fail'}` }));
+    const above = cy > T + 30;
+    svg.appendChild(el('text', { x: cx, y: above ? cy - 14 : cy + 22, 'text-anchor': 'middle', class: `run-label ${pass ? 'pass' : 'fail'}` },
+      `This run ${state.ber.toFixed(2)}%`));
+  }
+  host.replaceChildren(svg);
+}
+
+// Small exact-number table under the chart (the chart shows shape, this shows values).
+function renderSizeTable() {
+  const row = (m) => `<tr><td><span class="method-cell ${m}-cell">${m.toUpperCase()}</span></td>` +
+    BENCHMARK_BY_SIZE[m].map(v => `<td class="${v <= THRESHOLDS.ber ? 'better-val' : 'worse-val'}">${v}%</td>`).join('') + '</tr>';
+  document.getElementById('size-table-rows').innerHTML = row('cnn') + row('lsb');
 }
 
 // Research summary for the run that just happened. The wording follows the MEASURED result
@@ -1148,6 +1277,10 @@ function initApp() {
   updatePayloadMetrics();
   updateThreatVectorInfo();
   updateStepProgress();
+  document.getElementById('ber-target-value').textContent = THRESHOLDS.ber;
+  renderBenchmarkChart();
+  renderSizeTable();
+  updateBenchmarkTable();
 }
 
 window.addEventListener('DOMContentLoaded', initApp);

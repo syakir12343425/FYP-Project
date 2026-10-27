@@ -632,53 +632,56 @@
                   </button>
                 </div>
 
-                <!-- Message Recovery Comparison Panels -->
-                <div class="message-recovery-grid">
-                  <div class="recovery-box">
-                    <span class="box-label">Expected message</span>
-                    <div class="text-display" id="display-original-msg">
-                      Waiting for embedding process...
+                <!-- RESULTS: shown after an extraction. BER is the headline measurement. -->
+                <div class="result-block" id="extract-results">
+                  <div class="ber-hero" id="card-ber" data-state="idle">
+                    <div class="ber-hero-main">
+                      <span class="m-label">Bit error rate</span>
+                      <span class="ber-value" id="extract-ber">--</span>
+                      <span class="ber-bits" id="ber-bits"></span>
+                    </div>
+                    <div class="ber-hero-side">
+                      <span class="ber-verdict" id="ber-verdict">Run an extraction to measure BER.</span>
+                      <span class="ber-target">Target: &le; <span id="ber-target-value">5</span>% of bits wrong</span>
+                      <div class="m-indicator" id="ber-status-indicator" aria-hidden="true"></div>
                     </div>
                   </div>
-                  <div class="recovery-box">
-                    <span class="box-label" id="extracted-msg-label">Recovered message</span>
-                    <div class="text-display code-font" id="display-extracted-msg">
-                      Click "Extract Hidden Message" to recover...
+
+                  <div class="metrics-grid grid-2-small">
+                    <div class="mini-metric-card">
+                      <span class="m-label">PSNR</span>
+                      <span class="m-val" id="extract-psnr">--</span>
+                      <span class="m-sub">cover vs attacked image, after resize round-trip</span>
+                    </div>
+                    <div class="mini-metric-card">
+                      <span class="m-label">SSIM</span>
+                      <span class="m-val" id="extract-ssim">--</span>
+                      <span class="m-sub">cover vs attacked image, after resize round-trip</span>
                     </div>
                   </div>
-                </div>
 
-                <!-- Decryption Performance Metrics -->
-                <div class="metrics-grid grid-3-columns margin-top-20">
-                  
-                  <div class="mini-metric-card" id="card-ber">
-                    <span class="m-label">Bit error rate</span>
-                    <span class="m-val" id="extract-ber">-- %</span>
-                    <div class="m-indicator red" id="ber-status-indicator"></div>
+                  <!-- Message comparison: wrong characters in the recovered text are highlighted.
+                       Built with textContent only (recovered text is untrusted). -->
+                  <div class="message-recovery-grid">
+                    <div class="recovery-box">
+                      <span class="box-label">Expected message</span>
+                      <div class="text-display code-font" id="display-original-msg">Not extracted yet.</div>
+                    </div>
+                    <div class="recovery-box">
+                      <span class="box-label" id="extracted-msg-label">Recovered message</span>
+                      <div class="text-display code-font" id="display-extracted-msg">Not extracted yet.</div>
+                    </div>
                   </div>
+                  <p class="diff-summary" id="diff-summary" hidden></p>
 
-                  <div class="mini-metric-card">
-                    <span class="m-label">PSNR</span>
-                    <span class="m-val" id="extract-psnr">-- dB</span>
-                    <span class="m-sub">after resize round-trip</span>
+                  <div class="info-card academic-summary">
+                    <h4>Summary</h4>
+                    <p id="evaluation-summary-text">
+                      Run an extraction to see this session's result. For reference, the full eval.py benchmark
+                      (100 images &times; 5 algorithms &times; 4 sizes, 224&ndash;384 px) measured an average BER of
+                      1.15% for the CNN versus 48.00% for LSB, which is no better than guessing.
+                    </p>
                   </div>
-
-                  <div class="mini-metric-card">
-                    <span class="m-label">SSIM</span>
-                    <span class="m-val" id="extract-ssim">--</span>
-                    <span class="m-sub">after resize round-trip</span>
-                  </div>
-
-                </div>
-
-                <!-- Performance Summary textual description -->
-                <div class="info-card academic-summary">
-                  <h4>Summary</h4>
-                  <p id="evaluation-summary-text">
-                    Run an extraction to see this session's result. For reference, the full eval.py benchmark
-                    (100 images &times; 5 algorithms &times; 4 sizes, 224&ndash;384 px) measured an average BER of
-                    1.15% for the CNN versus 48.00% for LSB, which is no better than guessing.
-                  </p>
                 </div>
 
               </div>
@@ -700,67 +703,25 @@
                      Real averages from eval_summary.csv (100 images x 5 algorithms,
                      averaged per size). Page 3 offers exactly these four sizes. -->
                 <div class="chart-container">
-                  <span class="chart-title">Benchmark BER by output size</span>
-                  <div class="svg-chart-wrapper" id="svg-chart-wrapper">
-                    <svg viewBox="0 0 450 220" width="100%" height="100%" role="img" aria-label="Benchmark bit error rate per output size: LSB about 44 to 49 percent, CNN about 1.0 to 1.3 percent">
-                      <!-- Grid lines -->
-                      <line x1="50" y1="20" x2="420" y2="20" class="chart-grid" />
-                      <line x1="50" y1="65" x2="420" y2="65" class="chart-grid" />
-                      <line x1="50" y1="110" x2="420" y2="110" class="chart-grid" />
-                      <line x1="50" y1="155" x2="420" y2="155" class="chart-grid" />
-                      <line x1="50" y1="180" x2="420" y2="180" class="chart-axis" />
-
-                      <!-- Vertical axes -->
-                      <line x1="50" y1="20" x2="50" y2="180" class="chart-axis" />
-
-                      <!-- Axis Y Labels -->
-                      <text x="40" y="24" class="chart-tick" text-anchor="end">50%</text>
-                      <text x="40" y="69" class="chart-tick" text-anchor="end">35%</text>
-                      <text x="40" y="114" class="chart-tick" text-anchor="end">20%</text>
-                      <text x="40" y="159" class="chart-tick" text-anchor="end">5%</text>
-                      <text x="40" y="184" class="chart-tick" text-anchor="end">0%</text>
-
-                      <!-- Axis X Labels: the 4 sizes eval.py actually tested (384,299,256,224px = 75%,58%,50%,44% of the 512px crop) -->
-                      <text x="100" y="195" class="chart-tick" text-anchor="middle">75% (384px)</text>
-                      <text x="210" y="195" class="chart-tick" text-anchor="middle">58% (299px)</text>
-                      <text x="300" y="195" class="chart-tick" text-anchor="middle">50% (256px)</text>
-                      <text x="390" y="195" class="chart-tick" text-anchor="middle">44% (224px)</text>
-
-                      <text x="235" y="215" class="chart-axis-title" text-anchor="middle">Downscale Size Tested (% of 512px crop)</text>
-                      <text x="15" y="100" class="chart-axis-title" text-anchor="middle" transform="rotate(-90 15 100)">BER (%)</text>
-
-                      <!-- LSB series — real avg BER per size across all 5 algorithms -->
-                      <polyline points="50,180 100,38 210,23 300,37 390,22" class="series-line series-lsb" />
-                      <circle cx="100" cy="38" r="4" class="series-dot series-lsb" />
-                      <circle cx="210" cy="23" r="4" class="series-dot series-lsb" />
-                      <circle cx="300" cy="37" r="4" class="series-dot series-lsb" />
-                      <circle cx="390" cy="22" r="4" class="series-dot series-lsb" />
-                      <text x="70" y="33" class="series-label series-lsb">LSB (44.3%)</text>
-                      <text x="180" y="18" class="series-label series-lsb">LSB (49.2%)</text>
-                      <text x="270" y="50" class="series-label series-lsb">LSB (44.7%)</text>
-                      <text x="330" y="18" class="series-label series-lsb">LSB (49.4%)</text>
-
-                      <!-- CNN series — real avg BER per size across all 5 algorithms -->
-                      <polyline points="50,180 100,177 210,176 300,176 390,176" class="series-line series-cnn" />
-                      <circle cx="100" cy="177" r="4" class="series-dot series-cnn" />
-                      <circle cx="210" cy="176" r="4" class="series-dot series-cnn" />
-                      <circle cx="300" cy="176" r="4" class="series-dot series-cnn" />
-                      <circle cx="390" cy="176" r="4" class="series-dot series-cnn" />
-                      <text x="70" y="170" class="series-label series-cnn">CNN (1.04%)</text>
-                      <text x="180" y="168" class="series-label series-cnn">CNN (1.18%)</text>
-                      <text x="270" y="168" class="series-label series-cnn">CNN (1.19%)</text>
-                      <text x="355" y="168" class="series-label series-cnn">CNN (1.27%)</text>
-                    </svg>
+                  <div class="chart-head">
+                    <span class="chart-title">Benchmark BER by output size</span>
+                    <div class="chart-legend">
+                      <span class="legend-item"><span class="legend-color cnn"></span>CNN</span>
+                      <span class="legend-item"><span class="legend-color lsb"></span>LSB</span>
+                      <span class="legend-item"><span class="legend-color target"></span>5% target</span>
+                      <span class="legend-item run-legend" id="run-legend" hidden><span class="legend-color run"></span>This run</span>
+                    </div>
                   </div>
-                  <!-- Legend -->
-                  <div class="chart-legend">
-                    <span class="legend-item"><span class="legend-color lsb"></span>LSB Spatial Steganography</span>
-                    <span class="legend-item"><span class="legend-color cnn"></span>CNN Encoder-Decoder (Differentiable Layer)</span>
-                  </div>
+                  <div class="svg-chart-wrapper" id="svg-chart-wrapper"></div>
+                  <table class="academic-table size-table" aria-label="Benchmark BER per output size">
+                    <thead>
+                      <tr><th>Output size</th><th>384 px</th><th>299 px</th><th>256 px</th><th>224 px</th></tr>
+                    </thead>
+                    <tbody id="size-table-rows"></tbody>
+                  </table>
                   <p class="residual-desc chart-note">
-                    Averaged from the real 100-image &times; 5-algorithm eval.py benchmark (eval_summary.csv).
-                    These four sizes (44%&ndash;75% of 512 px) are the only ones used in training and in the
-                    benchmark, so Page 3 is limited to them. More aggressive downscaling is untested.
+                    Mean BER over 100 validation images &times; 5 resize algorithms (eval.py). These four sizes are
+                    the only ones used in training and testing, so the attack page is limited to them.
                   </p>
                 </div>
 
@@ -770,29 +731,13 @@
                   <table class="academic-table">
                     <thead>
                       <tr>
-                        <th>Stego Method</th>
-                        <th>Attack</th>
-                        <th>BER (%)</th>
-                        <th>Embed PSNR (dB)</th>
+                        <th>Method</th>
+                        <th>BER</th>
+                        <th>Embed PSNR</th>
                         <th>Embed SSIM</th>
                       </tr>
                     </thead>
-                    <tbody id="evaluation-table-rows">
-                      <tr>
-                        <td class="method-cell cnn-cell">CNN (Deep/Robust) &mdash; benchmark avg</td>
-                        <td>all 5 algorithms, 224&ndash;384 px</td>
-                        <td class="better-val">1.15%</td>
-                        <td>32.13 dB</td>
-                        <td>0.9514</td>
-                      </tr>
-                      <tr>
-                        <td class="method-cell lsb-cell">LSB (Standard) &mdash; benchmark avg</td>
-                        <td>all 5 algorithms, 224&ndash;384 px</td>
-                        <td class="worse-val">48.00%</td>
-                        <td>79.99 dB</td>
-                        <td>0.9999</td>
-                      </tr>
-                    </tbody>
+                    <tbody id="evaluation-table-rows"></tbody>
                   </table>
                 </div>
 

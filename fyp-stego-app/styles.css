@@ -860,7 +860,7 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 }
 .chart-grid { stroke: var(--border); stroke-dasharray: 3 3; }
 .chart-axis { stroke: var(--border-strong); stroke-width: 1; }
-.chart-tick { fill: var(--text-3); font-size: 10px; font-family: var(--font-sans); }
+.chart-tick { fill: var(--text-3); font-size: 11px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
 .chart-axis-title { fill: var(--text-2); font-size: 10px; font-weight: 600; font-family: var(--font-sans); }
 .series-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .series-line.series-cnn { stroke: var(--cnn); }
@@ -872,7 +872,7 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .series-label.series-cnn { fill: var(--cnn); }
 .series-label.series-lsb { fill: var(--lsb); }
 
-.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-xs); color: var(--text-2); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-xs); color: var(--text-2); }
 .legend-item { display: inline-flex; align-items: center; gap: var(--space-2); }
 .legend-color { width: 16px; height: 3px; border-radius: 2px; }
 .legend-color.cnn { background: var(--cnn); }
@@ -902,6 +902,74 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .lsb-cell { color: var(--lsb); }
 .better-val { color: var(--success); font-weight: 600; }
 .worse-val { color: var(--danger); font-weight: 600; }
+
+/* ---------------------------------------------------------------- page 4: results (phase 2) */
+.result-block { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
+
+/* headline BER: neutral until measured, then pass / fail against THRESHOLDS.ber */
+.ber-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+.ber-hero[data-state="pass"] { border-color: var(--success); background: var(--success-soft); }
+.ber-hero[data-state="fail"] { border-color: var(--danger); background: var(--danger-soft); }
+.ber-hero-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ber-value {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ber-hero[data-state="pass"] .ber-value { color: var(--success); }
+.ber-hero[data-state="fail"] .ber-value { color: var(--danger); }
+.ber-hero[data-state="idle"] .ber-value,
+.ber-hero[data-state="na"] .ber-value { color: var(--text-3); }
+.ber-bits { font-size: var(--text-xs); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ber-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); text-align: right; }
+.ber-verdict { font-size: var(--text-sm); font-weight: 600; }
+.ber-hero[data-state="pass"] .ber-verdict { color: var(--success); }
+.ber-hero[data-state="fail"] .ber-verdict { color: var(--danger); }
+.ber-hero[data-state="idle"] .ber-verdict,
+.ber-hero[data-state="na"] .ber-verdict { color: var(--text-2); font-weight: 500; }
+.ber-target { font-size: var(--text-xs); color: var(--text-3); }
+.ber-hero .m-indicator { display: none; }  /* state is shown by the card itself */
+
+.grid-2-small { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.grid-2-small .m-val { font-size: var(--text-lg); }
+
+/* character diff */
+.diff-bad { background: var(--danger-soft); color: var(--danger); border-radius: 2px; outline: 1px solid var(--danger); outline-offset: -1px; }
+.diff-missing { color: var(--danger); opacity: 0.8; }
+.diff-summary { font-size: var(--text-xs); color: var(--text-2); margin-top: calc(-1 * var(--space-2)); }
+.diff-summary[data-state="pass"] { color: var(--success); font-weight: 600; }
+
+/* chart */
+.chart-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.chart-target { stroke: var(--success); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.legend-color.target { background: repeating-linear-gradient(90deg, var(--success) 0 2px, transparent 2px 5px); }
+.legend-color.run { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text); background: transparent; }
+.chart-tick-sub { fill: var(--text-3); opacity: 0.8; }
+.run-marker { fill: none; stroke-width: 2.5; }
+.run-marker.pass { stroke: var(--success); }
+.run-marker.fail { stroke: var(--danger); }
+.run-label { font-size: 11px; font-weight: 700; font-family: var(--font-sans); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.run-label.pass { fill: var(--success); }
+.run-label.fail { fill: var(--danger); }
+.svg-chart-wrapper svg { width: 100%; height: auto; overflow: visible; }
+
+.size-table td, .size-table th { text-align: right; }
+.size-table td:first-child, .size-table th:first-child { text-align: left; }
+.size-table td { padding: var(--space-2) var(--space-3); }
+
+.cell-sub { display: block; font-size: var(--text-xs); color: var(--text-3); font-weight: 400; }
+.academic-table .run-row td { background: var(--accent-soft); }
 
 /* ---------------------------------------------------------------- academic figure captions */
 .academic-caption {
@@ -1069,6 +1137,9 @@ body.hide-academic-figures .fig-num { display: none !important; }
 }
 
 @media (max-width: 600px) {
+  .ber-hero { flex-direction: column; align-items: flex-start; }
+  .ber-hero-side { align-items: flex-start; text-align: left; }
+  .grid-2-small { grid-template-columns: 1fr; }
   .sample-grid, .scale-factor-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .method-selector-grid, .message-recovery-grid, .comparison-grid.active, .grid-3-columns { grid-template-columns: 1fr; }
   .downscaling-visual-grid { flex-direction: column; }
