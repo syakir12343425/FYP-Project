@@ -46,6 +46,16 @@ class RefreshToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class RevokedFamily(Base):
+    """A refresh-token family that has been killed (reuse detected, or logout).
+    Revoking only the existing token rows is not enough: a concurrent request can still INSERT a
+    new token into the family a moment later. Checking this table on every refresh closes that gap."""
+    __tablename__ = "revoked_families"
+    family_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(32))
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -7,12 +7,13 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 import config
-from db import AdminUser, RefreshToken, audit, aware, get_db, utcnow
+from db import AdminUser, RefreshToken, RevokedFamily, audit, aware, get_db, utcnow
 from security import (DUMMY_HASH, create_access_token, decode_access_token, hash_refresh_token,
                       new_refresh_token, verify_password)
 
@@ -48,6 +49,20 @@ def _issue_refresh(db: Session, user: AdminUser, family: str, resp: Response):
                         expires_at=utcnow() + timedelta(days=config.REFRESH_TTL_DAYS)))
     db.commit()
     _set_cookie(resp, raw)
+
+
+def _kill_family(db: Session, family_id: str, reason: str):
+    """Revoke every token in a family AND record the family as dead, so tokens inserted into it
+    later (by a request racing with this one) are rejected too."""
+    for _ in range(2):
+        db.execute(update(RefreshToken).where(RefreshToken.family_id == family_id).values(revoked=True))
+        if db.get(RevokedFamily, family_id) is None:
+            db.add(RevokedFamily(family_id=family_id, reason=reason))
+        try:
+            db.commit()
+            return
+        except IntegrityError:      # another request recorded the same family first - that's fine
+            db.rollback()
 
 
 @router.post("/login")
@@ -92,10 +107,12 @@ def refresh(request: Request, response: Response, refresh_token: str | None = Co
     rec = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(refresh_token)))
     if rec is None:
         raise HTTPException(401, "Invalid session")
+    if db.get(RevokedFamily, rec.family_id) is not None:
+        # Family already killed (reuse detected or logged out) - even a token issued after the kill.
+        raise HTTPException(401, "Session revoked")
     if rec.revoked:
         # An already-rotated token was replayed => likely theft. Kill the whole chain.
-        db.execute(update(RefreshToken).where(RefreshToken.family_id == rec.family_id).values(revoked=True))
-        db.commit()
+        _kill_family(db, rec.family_id, "reuse")
         audit(db, "refresh_reuse_detected", request, detail=f"family={rec.family_id}")
         response.delete_cookie(COOKIE, path="/api/auth")
         raise HTTPException(401, "Session revoked")
@@ -104,8 +121,21 @@ def refresh(request: Request, response: Response, refresh_token: str | None = Co
     user = db.get(AdminUser, rec.user_id)
     if user is None:
         raise HTTPException(401, "Invalid session")
-    rec.revoked = True                      # rotate: old token is single-use
+    # Rotate: the old token is single-use. Claim it ATOMICALLY in the database: only the request
+    # whose UPDATE flips revoked False->True wins. A plain read-then-write ("if not rec.revoked:
+    # rec.revoked = True") lets two concurrent requests with a stolen token both pass the check.
+    claimed = db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.id == rec.id, RefreshToken.revoked.is_(False))
+        .values(revoked=True)
+    ).rowcount
     db.commit()
+    if claimed != 1:
+        # Another request used this token first => same as replay: kill the whole chain.
+        _kill_family(db, rec.family_id, "reuse")
+        audit(db, "refresh_reuse_detected", request, detail=f"family={rec.family_id} (concurrent)")
+        response.delete_cookie(COOKIE, path="/api/auth")
+        raise HTTPException(401, "Session revoked")
     _issue_refresh(db, user, rec.family_id, response)
     audit(db, "token_refreshed", request, user.username)
     return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
@@ -119,8 +149,7 @@ def logout(request: Request, response: Response, refresh_token: str | None = Coo
     if refresh_token:
         rec = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(refresh_token)))
         if rec:
-            db.execute(update(RefreshToken).where(RefreshToken.family_id == rec.family_id).values(revoked=True))
-            db.commit()
+            _kill_family(db, rec.family_id, "logout")
             audit(db, "logout", request)
     response.delete_cookie(COOKIE, path="/api/auth")
     return {"ok": True}

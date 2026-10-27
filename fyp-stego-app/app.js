@@ -49,7 +49,18 @@ async function authPost(path, body) {
   });
 }
 
-async function silentRefresh() {
+// Single-flight: if several requests get 401 at once, they share ONE refresh call. Two parallel
+// refreshes would send the same single-use cookie twice, which the server treats as token theft
+// and answers by revoking the whole session.
+let refreshInFlight = null;
+function silentRefresh() {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
+async function doRefresh() {
   try {
     const res = await authPost("/api/auth/refresh");
     if (!res.ok) throw new Error("refresh failed");
