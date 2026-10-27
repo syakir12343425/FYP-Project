@@ -19,6 +19,13 @@ const REFERENCE = {
   lsb: { ber: 48.00, psnr: 79.99, ssim: 0.9999 },
 };
 
+// ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
+// The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
+const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
+
+// Payload size is counted in UTF-8 BYTES (what the server embeds), not JS string length.
+const utf8Bytes = (t) => new TextEncoder().encode(t).length;
+
 
 // ------------------------------------------------------------------ auth
 // Access token lives ONLY in this JS variable (never localStorage -> not stealable via XSS storage reads).
@@ -136,6 +143,7 @@ const state = {
 
   // Extraction parameters
   extracted: false,
+  recoveredExact: null,      // true/false once extracted with an expected message
   extractedMsg: '',
   ber: 0,
   extractedPsnr: 0,
@@ -416,11 +424,11 @@ function updatePayloadMetrics() {
   const text = elements.secretMessageInput.value.replace(/\r\n/g, '\n');
   state.message = text;
 
-  const chars = text.length;
-  const bits = chars * 8;
+  const chars = [...text].length;
+  const bits = utf8Bytes(text) * 8;
 
   elements.charCounter.innerText = `${chars} / 120 chars`;
-  elements.bitCounter.innerText = `${bits} bits`;
+  elements.bitCounter.innerText = `${bits} / 1024 bits`;
 }
 
 // SPA Routing
@@ -557,7 +565,7 @@ async function runStegoPipeline() {
   elements.btnEmbedPayload.innerText = "Processing Embedding...";
 
   writeLog("[INFO] Preprocessing cover pixel matrix (512x512x3)...", "info");
-  writeLog(`[INFO] Message byte representation converted to bitstream (${state.message.length * 8} bits, padded to 1024).`, "info");
+  writeLog(`[INFO] Message byte representation converted to bitstream (${utf8Bytes(state.message) * 8} bits, padded to 1024 and whitened).`, "info");
 
   try {
     const coverDataUrl = elements.coverCanvas.toDataURL('image/png');
@@ -597,7 +605,7 @@ async function runStegoPipeline() {
       elements.cnnNetworkPreview.style.display = 'none';
     } else {
       elements.methodTitleBadge.innerText = "CNN Encoder-Decoder Model";
-      elements.methodDetailsText.innerText = "Using a deep convolutional neural network, the encoder has been optimized jointly with a differentiable downscale simulator. It hides secret payload bits inside complex textures and edge contours rather than plain pixels, providing high resistance to downscaling attacks.";
+      elements.methodDetailsText.innerText = "The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The cost is image quality: about 32 dB PSNR, versus about 80 dB for LSB.";
       elements.cnnNetworkPreview.style.display = 'flex';
     }
 
@@ -633,7 +641,7 @@ async function runDownscalingAttack() {
   writeLog("[ATTACK] Sending stego image to server for real downscale attack...", "system");
   elements.btnSimulateAttack.disabled = true;
   elements.btnSimulateAttack.innerText = "Resizing Stego Image...";
-  elements.arrowScaleLabel.innerText = `${state.attackScale * 100}%`;
+  elements.arrowScaleLabel.innerText = `${Math.round(state.attackScale * 100)}%`;
 
   await drawDataUrlToCanvas(elements.attackInputCanvas, state.stegoImgData);
 
@@ -730,13 +738,14 @@ async function runExtractionAndEvaluation() {
     state.ber = berKnown ? data.ber * 100 : null;
 
     elements.displayExtractedMsg.innerText = data.recovered_message;
+    state.recoveredExact = expected ? data.recovered_message === expected : null;
     elements.extractBer.innerText = berKnown ? `${state.ber.toFixed(2)} %` : 'N/A (no expected message)';
 
     if (state.method === 'lsb') {
       elements.berStatusIndicator.className = "m-indicator red";
       elements.extractedMsgLabel.innerText = "Recovered Text (M') - [LSB]";
     } else {
-      elements.berStatusIndicator.className = !berKnown ? "m-indicator" : (state.ber < 5 ? "m-indicator green" : "m-indicator red");
+      elements.berStatusIndicator.className = !berKnown ? "m-indicator" : (state.ber <= THRESHOLDS.ber ? "m-indicator green" : "m-indicator red");
       elements.extractedMsgLabel.innerText = "Recovered Text (M') - [CNN]";
     }
 
@@ -771,12 +780,12 @@ async function runExtractionAndEvaluation() {
 // just happened (real numbers from the server), row 2 is the other method's
 // real aggregate average from the full eval.py benchmark (REFERENCE above).
 function updateBenchmarkTable() {
-  const scalePct = `${state.attackScale * 100}%`;
+  const scalePct = `${Math.round(state.attackScale * 100)}%`;
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
 
   const liveLabel = state.method === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
   const liveClass = state.method === 'cnn' ? 'cnn-cell' : 'lsb-cell';
-  const liveValClass = state.ber < 10 ? 'better-val' : 'worse-val';
+  const liveValClass = state.ber <= THRESHOLDS.ber ? 'better-val' : 'worse-val';
 
   const otherMethod = state.method === 'cnn' ? 'lsb' : 'cnn';
   const otherLabel = otherMethod === 'cnn' ? 'CNN (Deep/Robust)' : 'LSB (Standard)';
@@ -794,7 +803,7 @@ function updateBenchmarkTable() {
     </tr>
     <tr>
       <td class="method-cell ${otherClass}">${otherLabel} — benchmark avg</td>
-      <td>all algorithms, all sizes</td>
+      <td>all 5 algorithms, 224&ndash;384 px</td>
       <td class="${otherValClass}">${ref.ber.toFixed(2)}%</td>
       <td>${ref.psnr.toFixed(2)} dB</td>
       <td>${ref.ssim.toFixed(4)}</td>
@@ -802,16 +811,27 @@ function updateBenchmarkTable() {
   `;
 }
 
-// Update the textual academic explanation inside extraction module
+// Research summary for the run that just happened. The wording follows the MEASURED result
+// (against THRESHOLDS.ber), so a failed run is never described as a success.
 function updateAcademicSummaryParagraph() {
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
-  const scalePct = `${state.attackScale * 100}%`;
+  const scalePct = `${Math.round(state.attackScale * 100)}%`;
+  const ber = state.ber.toFixed(2);
+  const ok = state.ber <= THRESHOLDS.ber;
+  const exact = state.recoveredExact === true
+    ? ' The recovered text matches the expected message exactly.'
+    : (state.recoveredExact === false ? ' The recovered text still contains errors (no error-correcting code is used yet).' : '');
+  const attack = `<strong>${scalePct} ${algoName}</strong> downscaling`;
 
-  let summary = '';
+  let summary;
   if (state.method === 'lsb') {
-    summary = `Under standard spatial LSB embedding, downscaling filters cause destructive spatial coordinate interpolations. Applying a <strong>${scalePct} ${algoName} Resizing</strong> attack resulted in an unrecoverable <strong>${state.ber.toFixed(2)}% Bit Error Rate (BER)</strong>. This confirms that classical pixel-replacement steganography lacks any defensive capacity against spatial modifications.`;
+    summary = ok
+      ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact} This is unusual for LSB and is not what the benchmark shows (48.00% average); check that the image was actually downscaled.`
+      : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact} Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.`;
   } else {
-    summary = `The deep CNN Encoder-Decoder model was tested against the <strong>${scalePct} ${algoName} Resizing</strong> attack, yielding a <strong>${state.ber.toFixed(2)}% Bit Error Rate (BER)</strong>. The decoder reconstructs the secret message with high fidelity because information was distributed globally within structural coefficients optimized by the differentiable downscale layer during training.`;
+    summary = ok
+      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact} The benchmark average across 4,000 attacks is 1.15%.`
+      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact} This is worse than the 1.15% benchmark average. Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).`;
   }
   elements.evaluationSummaryText.innerHTML = summary;
 }
@@ -1041,16 +1061,31 @@ function initApp() {
   elements.btnExportReport.addEventListener('click', () => {
     elements.reportDate.innerText = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     elements.reportCoverName.innerText = `${state.coverScene.toUpperCase()} (512x512 px)`;
-    elements.reportMsgLen.innerText = `${state.message.length} characters (${state.message.length * 8} bits)`;
+    elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message) * 8} of 1024 bits)`;
 
-    const scalePct = `${state.attackScale * 100}%`;
+    const scalePct = `${Math.round(state.attackScale * 100)}%`;
     const algoName = elements.downscaleAlgorithm.options[elements.downscaleAlgorithm.selectedIndex].text;
 
-    elements.reportTableAlgo.innerText = algoName;
-    elements.reportTableScale.innerText = `${scalePct} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)`;
+    const attacked = state.attackSimulated && !state.downscaledUploaded;
+    elements.reportTableAlgo.innerText = attacked ? algoName : (state.downscaledUploaded ? 'Uploaded image (attack not run in this app)' : '--');
+    elements.reportTableScale.innerText = attacked
+      ? `${scalePct} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)` : '--';
 
+    // Benchmark rows: always the real eval.py averages (REFERENCE), never per-run numbers.
     elements.reportLsbBer.innerText = `${REFERENCE.lsb.ber.toFixed(2)}%`;
     elements.reportCnnBer.innerText = `${REFERENCE.cnn.ber.toFixed(2)}%`;
+    document.getElementById('report-lsb-psnr').innerText = `${REFERENCE.lsb.psnr.toFixed(2)} dB`;
+    document.getElementById('report-cnn-psnr').innerText = `${REFERENCE.cnn.psnr.toFixed(2)} dB`;
+    document.getElementById('report-lsb-ssim').innerText = REFERENCE.lsb.ssim.toFixed(4);
+    document.getElementById('report-cnn-ssim').innerText = REFERENCE.cnn.ssim.toFixed(4);
+
+    // This session's run: only what was actually measured; "--" when a step wasn't done.
+    document.getElementById('report-run-method').innerText =
+      state.extracted ? (state.method === 'cnn' ? 'CNN encoder-decoder' : 'LSB') : '--';
+    document.getElementById('report-run-ber').innerText =
+      state.extracted && state.ber !== null ? `${state.ber.toFixed(2)}%` : '-- (no extraction with an expected message)';
+    document.getElementById('report-run-exact').innerText =
+      state.recoveredExact === true ? 'Yes' : state.recoveredExact === false ? 'No' : '--';
 
     elements.reportModal.classList.add('active');
   });

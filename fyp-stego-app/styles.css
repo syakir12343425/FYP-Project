@@ -1835,3 +1835,26 @@ body.hide-academic-figures .academic-caption {
 .login-card input { padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #020617; color: #e2e8f0; }
 .login-error { min-height: 18px; font-size: 12px; color: #f43f5e; }
 .session-box { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; padding: 8px 0; }
+
+/* Section rows inside the exported report table */
+.report-table .report-subhead td {
+  background: rgba(148, 163, 184, 0.12);
+  font-size: 0.85em;
+}
+
+/* Icons inside buttons: without an explicit size, inline SVGs stretch to fill the button. */
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Expected-message box is a textarea (keeps line breaks); match the rest of the form. */
+#expected-msg-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 8px 10px;
+  resize: vertical;
+  box-sizing: border-box;
+}

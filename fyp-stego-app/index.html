@@ -135,7 +135,7 @@
               <span>Robustness: <strong>Active</strong></span>
             </div>
             <div class="status-badge-card model-type">
-              <span>Deep Engine: <strong>CNN-ResNet</strong></span>
+              <span>Deep Engine: <strong>6-layer residual CNN</strong></span>
             </div>
           </div>
         </div>
@@ -280,7 +280,7 @@
                   <div class="console-body" id="embedding-console">
                     <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
                     <div class="log-line info">[INFO] Sample image 'Lena.png' loaded in workspace memory.</div>
-                    <div class="log-line info">[INFO] Message capacity available: 16,384 bits. Current payload: 808 bits.</div>
+                    <div class="log-line info">[INFO] Payload capacity: 1,024 bits (128 bytes, up to 120 characters).</div>
                   </div>
                 </div>
 
@@ -608,7 +608,7 @@
 
           <!-- Caption for Figure 4.3 -->
           <div class="academic-caption" id="caption-4-3">
-            <strong>Figure 4.3:</strong> Downscaling Attack Simulation module, highlighted as the main feature of the system, displaying stego image input configuration, selection of interpolation kernels (Nearest Neighbor, Bilinear, Bicubic, Lanczos, and Area-based), scale parameters (50%, 25%, 12.5%), and the resulting downscaled preview.
+            <strong>Figure 4.3:</strong> Downscaling Attack Simulation module, highlighted as the main feature of the system, displaying stego image input configuration, selection of interpolation kernels (Nearest Neighbor, Bilinear, Bicubic, Lanczos, and Area-based), the four benchmarked scale settings (75%, 58%, 50%, 44% of 512 px, i.e. 384/299/256/224 px), and the resulting downscaled preview.
           </div>
         </section>
 
@@ -707,7 +707,9 @@
                 <div class="info-card academic-summary">
                   <h4>Research Performance Summary</h4>
                   <p id="evaluation-summary-text">
-                    Under standard spatial LSB embedding, downscaling filters cause destructive spatial coordinate interpolations, creating a Bit Error Rate (BER) close to 50% (random guess/broken data). Conversely, the CNN model leverages high-dimensional latent space encoding, maintaining 0.00% BER and ensuring complete secret data recovery even when the cover image is downscaled to 25% of its original resolution.
+                    Run an extraction to see this session's result. For reference, the full eval.py benchmark
+                    (100 images &times; 5 algorithms &times; 4 sizes, 224&ndash;384 px) measured an average BER of
+                    1.15% for the CNN versus 48.00% for LSB, which is no better than guessing.
                   </p>
                 </div>
 
@@ -728,8 +730,7 @@
                 
                 <!-- SVG-based line chart comparing LSB vs CNN BER at different scales.
                      Real averages from eval_summary.csv (100 images x 5 algorithms,
-                     averaged per size) — NOT the 50/25/12.5% buttons on Page 3, which
-                     were never actually benchmarked (see caption below). -->
+                     averaged per size). Page 3 offers exactly these four sizes. -->
                 <div class="chart-container">
                   <span class="chart-title">Bit Error Rate (BER) vs. Downscale Size (full eval.py benchmark)</span>
                   <div class="svg-chart-wrapper" id="svg-chart-wrapper">
@@ -790,9 +791,8 @@
                   </div>
                   <p class="residual-desc" style="margin-top:10px;">
                     Averaged from the real 100-image &times; 5-algorithm eval.py benchmark (eval_summary.csv).
-                    Note: these are the only sizes actually tested &mdash; Page 3's 50% / 25% / 12.5% scale
-                    buttons let you try more aggressive downscaling live, but results there (especially
-                    below ~44%) go beyond what this benchmark or training ever covered.
+                    These four sizes (44%&ndash;75% of 512 px) are the only ones used in training and in the
+                    benchmark, so Page 3 is limited to them. More aggressive downscaling is untested.
                   </p>
                 </div>
 
@@ -803,40 +803,26 @@
                     <thead>
                       <tr>
                         <th>Stego Method</th>
-                        <th>Downscale Scale</th>
-                        <th>Avg. BER (%)</th>
-                        <th>Avg. PSNR (dB)</th>
-                        <th>Avg. SSIM</th>
+                        <th>Attack</th>
+                        <th>BER (%)</th>
+                        <th>Embed PSNR (dB)</th>
+                        <th>Embed SSIM</th>
                       </tr>
                     </thead>
                     <tbody id="evaluation-table-rows">
                       <tr>
-                        <td class="method-cell lsb-cell">LSB (Standard)</td>
-                        <td>50% (Bicubic)</td>
-                        <td class="worse-val">32.41%</td>
-                        <td>12.18 dB</td>
-                        <td>0.4851</td>
+                        <td class="method-cell cnn-cell">CNN (Deep/Robust) &mdash; benchmark avg</td>
+                        <td>all 5 algorithms, 224&ndash;384 px</td>
+                        <td class="better-val">1.15%</td>
+                        <td>32.13 dB</td>
+                        <td>0.9514</td>
                       </tr>
                       <tr>
-                        <td class="method-cell lsb-cell">LSB (Standard)</td>
-                        <td>25% (Bicubic)</td>
-                        <td class="worse-val">46.18%</td>
-                        <td>9.04 dB</td>
-                        <td>0.2982</td>
-                      </tr>
-                      <tr>
-                        <td class="method-cell cnn-cell">CNN (Deep/Robust)</td>
-                        <td>50% (Bicubic)</td>
-                        <td class="better-val">0.00%</td>
-                        <td>31.45 dB</td>
-                        <td>0.9104</td>
-                      </tr>
-                      <tr>
-                        <td class="method-cell cnn-cell">CNN (Deep/Robust)</td>
-                        <td>25% (Bicubic)</td>
-                        <td class="better-val">0.00%</td>
-                        <td>28.52 dB</td>
-                        <td>0.8653</td>
+                        <td class="method-cell lsb-cell">LSB (Standard) &mdash; benchmark avg</td>
+                        <td>all 5 algorithms, 224&ndash;384 px</td>
+                        <td class="worse-val">48.00%</td>
+                        <td>79.99 dB</td>
+                        <td>0.9999</td>
                       </tr>
                     </tbody>
                   </table>
@@ -863,7 +849,7 @@
 
           <!-- Caption for Figure 4.4 -->
           <div class="academic-caption" id="caption-4-4">
-            <strong>Figure 4.4:</strong> Extraction &amp; Evaluation dashboard exhibiting recovered payload bitstreams, subjective Bit Error Rates (BER) comparing LSB vs CNN configurations, line charts comparing scaling decay, and detailed benchmark metrics tables.
+            <strong>Figure 4.4:</strong> Extraction &amp; Evaluation dashboard exhibiting recovered payload bitstreams, measured Bit Error Rate (BER) for the current run, the benchmark BER per downscale size for LSB and CNN, and a table comparing this run with the benchmark averages.
           </div>
         </section>
 
@@ -885,10 +871,10 @@
           <h3>AI-Based Robust Steganography Against Image Downscaling Attacks</h3>
           <p class="institution">Faculty of Computer Science and Cybersecurity Research Centre</p>
           <div class="report-meta-grid">
-            <div><strong>Date:</strong> <span id="report-date">June 18, 2026</span></div>
+            <div><strong>Date:</strong> <span id="report-date">--</span></div>
             <div><strong>System Engine:</strong> CNN Encoder-Decoder v1.0</div>
-            <div><strong>Cover Image:</strong> <span id="report-cover-name">Lena (512x512)</span></div>
-            <div><strong>Secret Message:</strong> <span id="report-msg-len">80 chars</span></div>
+            <div><strong>Cover Image:</strong> <span id="report-cover-name">--</span></div>
+            <div><strong>Secret Message:</strong> <span id="report-msg-len">--</span></div>
           </div>
         </div>
         
@@ -907,39 +893,48 @@
             </tr>
           </thead>
           <tbody>
+            <tr class="report-subhead"><td colspan="3"><strong>Benchmark</strong> (eval.py: 100 images &times; 5 algorithms &times; 4 sizes = 4,000 attacks per method)</td></tr>
             <tr>
-              <td>Original Embedding PSNR</td>
-              <td>51.20 dB</td>
-              <td>38.42 dB</td>
+              <td>Embedding PSNR (avg)</td>
+              <td id="report-lsb-psnr">--</td>
+              <td id="report-cnn-psnr">--</td>
             </tr>
             <tr>
-              <td>Original Embedding SSIM</td>
-              <td>0.9998</td>
-              <td>0.9682</td>
+              <td>Embedding SSIM (avg)</td>
+              <td id="report-lsb-ssim">--</td>
+              <td id="report-cnn-ssim">--</td>
+            </tr>
+            <tr>
+              <td>Post-attack BER (avg)</td>
+              <td class="worse-val" id="report-lsb-ber">--</td>
+              <td class="better-val" id="report-cnn-ber">--</td>
+            </tr>
+            <tr class="report-subhead"><td colspan="3"><strong>This session's run</strong></td></tr>
+            <tr>
+              <td>Method</td>
+              <td colspan="2" id="report-run-method" class="center">--</td>
             </tr>
             <tr>
               <td>Downscaling Algorithm Used</td>
-              <td colspan="2" id="report-table-algo" class="center">Bicubic Resizing</td>
+              <td colspan="2" id="report-table-algo" class="center">--</td>
             </tr>
             <tr>
-              <td>Downscaling Scale Factor</td>
-              <td colspan="2" id="report-table-scale" class="center">25% (128x128 px)</td>
+              <td>Downscaled Size</td>
+              <td colspan="2" id="report-table-scale" class="center">--</td>
             </tr>
             <tr>
-              <td>Post-Attack Extraction BER</td>
-              <td class="worse-val" id="report-lsb-ber">46.18%</td>
-              <td class="better-val" id="report-cnn-ber">0.00%</td>
+              <td>Post-attack BER</td>
+              <td colspan="2" id="report-run-ber" class="center">--</td>
             </tr>
             <tr>
-              <td>Hidden Message Integrity</td>
-              <td class="worse-val">Corrupted / Lost</td>
-              <td class="better-val">100% Recovered</td>
+              <td>Message recovered exactly</td>
+              <td colspan="2" id="report-run-exact" class="center">--</td>
             </tr>
           </tbody>
         </table>
 
         <h4>3. Methodological Discussion</h4>
-        <p>Under LSB steganography, data bits are overwritten sequentially into the 8th bit of pixel values. Resizing operations average these matrices out, obliterating the spatial bits. Conversely, the CNN Encoder-Decoder employs deep residual learning with sub-pixel interpolation simulator layers during training. The CNN embeds message signatures in structural patterns (e.g., textures, edges) rather than discrete pixels, allowing the decoder to successfully recover the message from downscaled and interpolated blocks.</p>
+        <p>LSB steganography writes each message bit into the least significant bit of a pixel value. Downscaling resamples and averages neighbouring pixels, so those exact bits do not survive, and extraction is no better than guessing (about 48% BER). The CNN encoder adds a small learned residual (at most about 3% of the pixel range) to the cover image. During training, a differentiable downscaling layer (nearest, bilinear, bicubic and area, to 224&ndash;384 px, with 8-bit quantisation) sat between encoder and decoder, so both networks learned a representation that survives resizing. Lanczos was held out of training and still decodes at a similar error rate. The trade-off is image quality: about 32 dB PSNR for the CNN versus about 80 dB for LSB. Messages are whitened with a fixed public keystream before embedding; this is not encryption.</p>
 
         <div class="report-signature">
           <div class="sig-line"></div>
