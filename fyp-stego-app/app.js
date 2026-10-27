@@ -413,7 +413,7 @@ function writeLog(text, type = 'info') {
 
 // Update character and bit length indicators
 function updatePayloadMetrics() {
-  const text = elements.secretMessageInput.value;
+  const text = elements.secretMessageInput.value.replace(/\r\n/g, '\n');
   state.message = text;
 
   const chars = text.length;
@@ -695,7 +695,8 @@ async function runExtractionAndEvaluation() {
   }
 
   state.method = document.getElementById('extract-method').value;
-  const expected = document.getElementById('expected-msg-input').value;
+  // Normalise Windows line endings so a pasted message compares equal to the embedded one.
+  const expected = document.getElementById('expected-msg-input').value.replace(/\r\n/g, '\n');
 
   elements.btnExtractMessage.disabled = true;
   elements.btnExtractMessage.innerText = "Decrypting Payload...";

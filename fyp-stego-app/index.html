@@ -649,7 +649,9 @@
                 </div>
                 <div class="form-section">
                   <label class="section-label" for="expected-msg-input">Expected message (optional &mdash; only needed to calculate BER)</label>
-                  <input type="text" id="expected-msg-input" class="form-control" maxlength="120" placeholder="Leave empty to extract blind">
+                  <!-- textarea, not <input type="text">: a single-line input silently strips line breaks, so a
+                       multi-line message would be compared against the wrong text and BER would be wrong. -->
+                  <textarea id="expected-msg-input" class="form-control" maxlength="120" rows="2" placeholder="Leave empty to extract blind"></textarea>
                 </div>
 
                 <div class="form-actions-bar">
