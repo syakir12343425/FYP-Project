@@ -39,12 +39,14 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from models import Encoder, Decoder
 from downscale import cv2_downscale_numpy
 from lsb_baseline import lsb_embed, lsb_extract
+from payload import MESSAGE_BITS as PAYLOAD_BITS, bits_to_text, decode_bits, encode_message, text_to_bits
 
 import config
 from auth_routes import limiter, require_user, router as auth_router
 from db import AdminUser, SessionLocal, audit, get_db, init_db
 
 MESSAGE_BITS = 1024          # must match training (configs/config.yaml -> message.bits)
+assert MESSAGE_BITS == PAYLOAD_BITS, "payload.py and server.py disagree on payload size"
 CHECKPOINT_PATH = "checkpoints/best.pt"   # copy best.pt down from Drive to here
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -160,18 +162,7 @@ def to_uint8_array(t: torch.Tensor) -> np.ndarray:
 
 
 # ------------------------------------------------------------- message codec
-def text_to_bits(text: str, n_bits: int = MESSAGE_BITS) -> np.ndarray:
-    n_bytes = n_bits // 8
-    data = text.encode("utf-8")[:n_bytes].ljust(n_bytes, b"\x00")
-    return np.unpackbits(np.frombuffer(data, dtype=np.uint8))
-
-
-def bits_to_text(bits: np.ndarray) -> str:
-    byte_arr = np.packbits(np.asarray(bits, dtype=np.uint8))
-    raw = byte_arr.tobytes().split(b"\x00", 1)[0]  # stop at the zero-padding
-    return raw.decode("utf-8", errors="replace")
-
-
+# Lives in payload.py: text <-> bits plus whitening (see that file for why).
 # ------------------------------------------------------------------ schemas
 MAX_IMG_CHARS = 5_500_000   # ~4 MB of base64
 
@@ -223,7 +214,7 @@ def health():
 def embed(request: Request, req: EmbedRequest, user: AdminUser = Depends(require_user),
           db: Session = Depends(get_db)):
     cover_np = decode_base64_image_512(req.cover_image)
-    bits = text_to_bits(req.message)
+    bits = encode_message(req.message)       # whitened: looks like the random bits the CNN trained on
 
     if req.method == "cnn":
         cover_t = to_tensor(cover_np).unsqueeze(0).to(DEVICE)
@@ -270,12 +261,13 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
     else:  # lsb
         bits = lsb_extract(img_np, MESSAGE_BITS)
 
-    recovered_text = bits_to_text(bits)
+    plain_bits = decode_bits(bits)            # undo whitening (bit errors pass through unchanged)
+    recovered_text = bits_to_text(plain_bits)
 
     ber = None
     if req.original_message:
         true_bits = text_to_bits(req.original_message)
-        ber = float(np.mean(true_bits != bits))
+        ber = float(np.mean(true_bits != plain_bits))
 
     extracted_psnr = None
     extracted_ssim = None
