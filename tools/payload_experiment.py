@@ -6,7 +6,8 @@ SAME cover, applies the SAME OpenCV attack, and reports BER for each:
 
   random     - uniformly random bits (what the benchmark measured)
   text       - your message + zero padding, exactly as server.py sends it today
-  whitened   - the same text through payload.py (what server.py embeds now)
+  coded      - the same text through payload.py, exactly as server.py embeds it now
+               (Reed-Solomon codeword + whitening); shows raw BER and whether the text came back exact
 
 Usage (repo root, needs checkpoints/best.pt; runs on CPU in a few seconds per image):
     python tools/payload_experiment.py path\\to\\photo.png
@@ -24,7 +25,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from downscale import cv2_downscale_numpy   # noqa: E402
 from models import Decoder, Encoder          # noqa: E402
-from payload import decode_bits, encode_message  # noqa: E402  (the codec server.py uses)
+from payload import decode_payload, encode_message  # noqa: E402  (the codec server.py uses)
 
 BITS = 1024
 
@@ -61,7 +62,7 @@ def main():
     ap.add_argument("--checkpoint", default="checkpoints/best.pt")
     ap.add_argument("--algo", default="bicubic", choices=["nearest", "bilinear", "bicubic", "lanczos", "area"])
     ap.add_argument("--size", type=int, default=384, choices=[224, 256, 299, 384])
-    ap.add_argument("--msg", default="try something lagi la kawan")
+    ap.add_argument("--msg", default="Hidden message that survives downscaling.")
     args = ap.parse_args()
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
@@ -76,17 +77,21 @@ def main():
     rand = np.random.default_rng(0).integers(0, 2, BITS, dtype=np.uint8)
 
     print(f"attack: {args.algo} -> {args.size}px | message: {n_msg // 8} bytes + {BITS - n_msg} padding bits\n")
-    print(f"{'image':28s} {'random':>8s} {'text':>8s} {'  (msg part / padding)':>24s} {'whitened':>9s}")
+    print(f"{'image':28s} {'random':>8s} {'text':>8s} {'  (msg part / padding)':>24s} {'coded':>8s}  exact?")
     for path in args.images:
         cover = load_cover(path)
         r = run(encoder, decoder, cover, rand, args.algo, args.size)
         t = run(encoder, decoder, cover, tb, args.algo, args.size)
-        w = decode_bits(run(encoder, decoder, cover, encode_message(args.msg), args.algo, args.size))
+        sent = encode_message(args.msg)
+        got = run(encoder, decoder, cover, sent, args.algo, args.size)
+        dec = decode_payload(got)
+        exact = ("yes" if dec["text"] == args.msg else "NO") if dec["ok"] else "failed"
+        fixed = f" ({dec['corrected_bytes']} bytes fixed)" if dec["ok"] else ""
         ber = lambda got, ref: 100 * float(np.mean(got != ref))
         msg_part = ber(t[:n_msg], tb[:n_msg])
         pad_part = ber(t[n_msg:], tb[n_msg:])
         print(f"{Path(path).name[:28]:28s} {ber(r, rand):7.2f}% {ber(t, tb):7.2f}% "
-              f"{f'({msg_part:.1f}% / {pad_part:.1f}%)':>24s} {ber(w, tb):8.2f}%")
+              f"{f'({msg_part:.1f}% / {pad_part:.1f}%)':>24s} {ber(got, sent):7.2f}%  {exact}{fixed}")
 
 
 if __name__ == "__main__":

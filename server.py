@@ -39,7 +39,7 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from models import Encoder, Decoder
 from downscale import cv2_downscale_numpy
 from lsb_baseline import lsb_embed, lsb_extract
-from payload import MESSAGE_BITS as PAYLOAD_BITS, bits_to_text, decode_bits, encode_message, text_to_bits
+from payload import MAX_MESSAGE_BYTES, MESSAGE_BITS as PAYLOAD_BITS, MessageTooLong, decode_payload, encode_message
 
 import config
 from auth_routes import limiter, require_user, router as auth_router
@@ -162,13 +162,13 @@ def to_uint8_array(t: torch.Tensor) -> np.ndarray:
 
 
 # ------------------------------------------------------------- message codec
-# Lives in payload.py: text <-> bits plus whitening (see that file for why).
+# Lives in payload.py: text <-> Reed-Solomon codeword <-> whitened bits (see that file for why).
 # ------------------------------------------------------------------ schemas
 MAX_IMG_CHARS = 5_500_000   # ~4 MB of base64
 
 class EmbedRequest(BaseModel):
     cover_image: str = Field(max_length=MAX_IMG_CHARS)
-    message: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_BYTES)
     method: Literal["cnn", "lsb"]
 
 
@@ -192,7 +192,7 @@ class DownscaleResponse(BaseModel):
 class ExtractRequest(BaseModel):
     image: str = Field(max_length=MAX_IMG_CHARS)
     method: Literal["cnn", "lsb"]
-    original_message: str = Field(default="", max_length=120)
+    original_message: str = Field(default="", max_length=MAX_MESSAGE_BYTES)
     cover_image: str = Field(default="", max_length=MAX_IMG_CHARS)
 
 
@@ -201,6 +201,8 @@ class ExtractResponse(BaseModel):
     ber: float | None = None
     extracted_psnr: float | None = None   # cover vs. (downscaled image upscaled back to 512x512)
     extracted_ssim: float | None = None
+    ecc_ok: bool                          # Reed-Solomon decoding succeeded (message is exact)
+    ecc_corrected_bytes: int | None = None  # bytes repaired; None when decoding failed
 
 
 # ------------------------------------------------------------------ routes
@@ -214,7 +216,10 @@ def health():
 def embed(request: Request, req: EmbedRequest, user: AdminUser = Depends(require_user),
           db: Session = Depends(get_db)):
     cover_np = decode_base64_image_512(req.cover_image)
-    bits = encode_message(req.message)       # whitened: looks like the random bits the CNN trained on
+    try:
+        bits = encode_message(req.message)   # RS-encoded + whitened: looks like the random bits the CNN trained on
+    except MessageTooLong as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     if req.method == "cnn":
         cover_t = to_tensor(cover_np).unsqueeze(0).to(DEVICE)
@@ -261,13 +266,18 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
     else:  # lsb
         bits = lsb_extract(img_np, MESSAGE_BITS)
 
-    plain_bits = decode_bits(bits)            # undo whitening (bit errors pass through unchanged)
-    recovered_text = bits_to_text(plain_bits)
+    decoded = decode_payload(bits)            # unwhiten + Reed-Solomon correction
+    recovered_text = decoded["text"]
 
+    # BER is the RAW channel error rate on the 1024 transmitted bits (before error correction),
+    # so it stays comparable with the eval.py benchmark.
     ber = None
     if req.original_message:
-        true_bits = text_to_bits(req.original_message)
-        ber = float(np.mean(true_bits != plain_bits))
+        try:
+            true_bits = encode_message(req.original_message)
+        except MessageTooLong as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        ber = float(np.mean(true_bits != bits))
 
     extracted_psnr = None
     extracted_ssim = None
@@ -289,10 +299,13 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
         )
 
     audit(db, "extract", request, user.username,
-          f"method={req.method} size={img_np.shape[0]} ber={'' if ber is None else round(ber, 4)}")
+          f"method={req.method} size={img_np.shape[0]} ber={'' if ber is None else round(ber, 4)} "
+          f"ecc={'ok:' + str(decoded['corrected_bytes']) if decoded['ok'] else 'failed'}")
     return ExtractResponse(
         recovered_message=recovered_text,
         ber=ber,
+        ecc_ok=decoded["ok"],
+        ecc_corrected_bytes=decoded["corrected_bytes"],
         extracted_psnr=extracted_psnr,
         extracted_ssim=extracted_ssim,
     )

@@ -175,10 +175,10 @@
                 <div class="form-section">
                   <label class="section-label" for="secret-message-input">2. Secret message</label>
                   <div class="message-input-wrapper">
-                    <textarea id="secret-message-input" placeholder="Type secret message to embed in cover image..." maxlength="120">Deep Steganography hides messages within image features, maintaining robustness against Downscaling Attacks.</textarea>
+                    <textarea id="secret-message-input" placeholder="Type the secret message (up to 63 bytes)..." maxlength="63" aria-describedby="char-counter bit-counter">Hidden message that survives downscaling.</textarea>
                     <div class="message-meta">
-                      <span id="char-counter">0 / 120 chars</span>
-                      <span id="bit-counter">0 bits</span>
+                      <span id="char-counter" aria-live="polite">0 / 63 bytes</span>
+                      <span id="bit-counter">+ 64 bytes error correction = 1024 bits</span>
                     </div>
                   </div>
                 </div>
@@ -256,7 +256,7 @@
                   <div class="console-body" id="embedding-console" role="log" aria-live="polite" aria-label="Activity log">
                     <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
                     <div class="log-line info">[INFO] Sample 'Portrait' loaded (synthetic drawing).</div>
-                    <div class="log-line info">[INFO] Payload capacity: 1,024 bits (128 bytes, up to 120 characters).</div>
+                    <div class="log-line info">[INFO] Payload: 1,024 bits = up to 63 message bytes + 64 Reed-Solomon parity bytes.</div>
                   </div>
                 </div>
 
@@ -366,7 +366,7 @@
                   <h4 id="method-title-badge">CNN encoder-decoder</h4>
                   <div class="method-diagram-preview" id="cnn-network-preview">
                     <!-- SVG diagram placeholder -->
-                    <a href="assets/network_diagram.svg" target="_blank" rel="noopener" title="Open the diagram full size"><img src="assets/network_diagram.svg" alt="Network diagram: cover and message go into the CNN encoder, the stego image is downscaled, and the CNN decoder recovers the message"></a>
+                    <a href="assets/network_diagram.svg?v=2" target="_blank" rel="noopener" title="Open the diagram full size"><img src="assets/network_diagram.svg?v=2" alt="Network diagram: cover and message go into the CNN encoder, the stego image is downscaled, and the CNN decoder recovers the message"></a>
                   </div>
                   <p id="method-details-text">The encoder and decoder were trained together with a differentiable downscaling layer between them, so the hidden bits survive resizing.</p>
                 </div>
@@ -630,7 +630,7 @@
                   <label class="section-label" for="expected-msg-input">Expected message <span class="label-hint">(optional, needed for BER)</span></label>
                   <!-- textarea, not <input type="text">: a single-line input silently strips line breaks, so a
                        multi-line message would be compared against the wrong text and BER would be wrong. -->
-                  <textarea id="expected-msg-input" class="form-control" maxlength="120" rows="2" placeholder="Leave empty to extract blind"></textarea>
+                  <textarea id="expected-msg-input" class="form-control" maxlength="63" rows="2" placeholder="Leave empty to extract blind"></textarea>
                 </div>
 
                 <div class="form-actions-bar">
@@ -654,6 +654,7 @@
                     <div class="ber-hero-side" aria-live="polite">
                       <span class="ber-verdict" id="ber-verdict">Run an extraction to measure BER.</span>
                       <span class="ber-target">Target: &le; <span id="ber-target-value">5</span>% of bits wrong</span>
+                      <span class="ecc-status" id="ecc-status" hidden></span>
                       <div class="m-indicator" id="ber-status-indicator" aria-hidden="true"></div>
                     </div>
                   </div>
@@ -858,7 +859,7 @@
         </table>
 
         <h4>3. Methodological Discussion</h4>
-        <p>LSB steganography writes each message bit into the least significant bit of a pixel value. Downscaling resamples and averages neighbouring pixels, so those exact bits do not survive, and extraction is no better than guessing (about 48% BER). The CNN encoder adds a small learned residual (at most about 3% of the pixel range) to the cover image. During training, a differentiable downscaling layer (nearest, bilinear, bicubic and area, to 224&ndash;384 px, with 8-bit quantisation) sat between encoder and decoder, so both networks learned a representation that survives resizing. Lanczos was held out of training and still decodes at a similar error rate. The trade-off is image quality: about 32 dB PSNR for the CNN versus about 80 dB for LSB. Messages are whitened with a fixed public keystream before embedding; this is not encryption.</p>
+        <p>LSB steganography writes each message bit into the least significant bit of a pixel value. Downscaling resamples and averages neighbouring pixels, so those exact bits do not survive, and extraction is no better than guessing (about 48% BER). The CNN encoder adds a small learned residual (at most about 3% of the pixel range) to the cover image. During training, a differentiable downscaling layer (nearest, bilinear, bicubic and area, to 224&ndash;384 px, with 8-bit quantisation) sat between encoder and decoder, so both networks learned a representation that survives resizing. Lanczos was held out of training and still decodes at a similar error rate. The trade-off is image quality: about 32 dB PSNR for the CNN versus about 80 dB for LSB. Each message is protected with Reed&ndash;Solomon error correction (RS(128,64) over GF(2<sup>8</sup>): 63 message bytes plus 64 parity bytes, repairing up to 32 damaged bytes) and then whitened with a fixed public keystream; whitening is not encryption. The bit error rate reported here is the raw rate before error correction.</p>
 
         <div class="report-signature">
           <div class="sig-line"></div>

@@ -31,6 +31,9 @@ const BENCHMARK_BY_SIZE = {
 // Display names for the built-in synthetic sample drawings (keys = data-sample values).
 const SAMPLE_NAMES = { lena: 'Portrait', mandrill: 'Mandrill', satellite: 'Aerial', medical: 'Brain scan' };
 
+// Payload layout (must match payload.py): 63 message bytes + 1 length byte + 64 Reed-Solomon parity bytes.
+const MAX_MESSAGE_BYTES = 63;
+
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
 // The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
 const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
@@ -156,6 +159,7 @@ const state = {
   // Extraction parameters
   extracted: false,
   recoveredExact: null,      // true/false once extracted with an expected message
+  ecc: null,                 // {ok, corrected} from the server's Reed-Solomon decode
   extractedMsg: '',
   ber: 0,
   extractedPsnr: 0,
@@ -436,11 +440,9 @@ function updatePayloadMetrics() {
   const text = elements.secretMessageInput.value.replace(/\r\n/g, '\n');
   state.message = text;
 
-  const chars = [...text].length;
-  const bits = utf8Bytes(text) * 8;
-
-  elements.charCounter.innerText = `${chars} / 120 chars`;
-  elements.bitCounter.innerText = `${bits} / 1024 bits`;
+  const bytes = utf8Bytes(text);
+  elements.charCounter.innerText = `${bytes} / ${MAX_MESSAGE_BYTES} bytes`;
+  elements.charCounter.classList.toggle('over-limit', bytes > MAX_MESSAGE_BYTES);
 }
 
 function applyTheme(theme) {
@@ -565,6 +567,13 @@ function drawResidualMap(coverCanvas, stegoCanvas, outCanvas) {
   outCtx.putImageData(residual, 0, 0);
 }
 
+// Turns a non-OK response into an Error with the server's own message when it sent one.
+async function responseError(res) {
+  let detail = '';
+  try { const j = await res.json(); detail = typeof j.detail === 'string' ? j.detail : ''; } catch (_) { /* not JSON */ }
+  return new Error(detail || `Server returned HTTP ${res.status}`);
+}
+
 // Friendlier error if the server simply isn't running / unreachable.
 function describeFetchError(err) {
   if (err instanceof TypeError) {
@@ -611,13 +620,17 @@ async function runStegoPipeline() {
     alert("Please enter a secret message payload before embedding.");
     return;
   }
+  if (utf8Bytes(state.message) > MAX_MESSAGE_BYTES) {
+    alert(`The message is ${utf8Bytes(state.message)} bytes; the limit is ${MAX_MESSAGE_BYTES} bytes (emoji and accented letters use more than 1 byte).`);
+    return;
+  }
 
   writeLog("[SYSTEM] Initiating embedding request to inference server...", "system");
   elements.btnEmbedPayload.disabled = true;
   setBtnLabel(elements.btnEmbedPayload, "Embedding…");
 
   writeLog("[INFO] Preprocessing cover pixel matrix (512x512x3)...", "info");
-  writeLog(`[INFO] Message byte representation converted to bitstream (${utf8Bytes(state.message) * 8} bits, padded to 1024 and whitened).`, "info");
+  writeLog(`[INFO] Message byte representation converted to bitstream (${utf8Bytes(state.message)} bytes + Reed-Solomon parity = 1024 bits, whitened).`, "info");
 
   try {
     const coverDataUrl = elements.coverCanvas.toDataURL('image/png');
@@ -638,7 +651,7 @@ async function runStegoPipeline() {
         method: state.method,
       }),
     });
-    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    if (!res.ok) throw await responseError(res);
     const data = await res.json(); // { stego_image, psnr, ssim }
 
     state.embedded = true;
@@ -716,7 +729,7 @@ async function runDownscalingAttack() {
         scale: state.attackScale,
       }),
     });
-    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    if (!res.ok) throw await responseError(res);
     const data = await res.json(); // { downscaled_image, size }
 
     state.downscaledImgData = data.downscaled_image;
@@ -794,7 +807,7 @@ async function runExtractionAndEvaluation() {
         cover_image: coverDataUrl,
       }),
     });
-    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+    if (!res.ok) throw await responseError(res);
     const data = await res.json(); // { recovered_message, ber, extracted_psnr, extracted_ssim }
 
     state.extracted = true;
@@ -803,6 +816,11 @@ async function runExtractionAndEvaluation() {
     state.ber = berKnown ? data.ber * 100 : null;
 
     state.recoveredExact = expected ? data.recovered_message === expected : null;
+    // Older servers don't report error correction: show nothing rather than a false "failed".
+    state.ecc = typeof data.ecc_ok === 'boolean'
+      ? { ok: data.ecc_ok, corrected: data.ecc_corrected_bytes }
+      : null;
+    updateEccStatus();
     renderMessageDiff(expected, data.recovered_message);
     updateBerHero(berKnown);
     elements.extractedMsgLabel.innerText =
@@ -895,6 +913,19 @@ function updateBerHero(berKnown) {
   elements.berStatusIndicator.className = pass ? 'm-indicator green' : 'm-indicator red';
 }
 
+// Reed-Solomon outcome, shown under the BER verdict. Independent of the expected message.
+function updateEccStatus() {
+  const el = document.getElementById('ecc-status');
+  if (!state.ecc) { el.hidden = true; return; }
+  el.hidden = false;
+  el.dataset.state = state.ecc.ok ? 'ok' : 'failed';
+  el.textContent = !state.ecc.ok
+    ? 'Error correction failed: more than 32 of 128 bytes damaged'
+    : state.ecc.corrected === 0
+      ? 'Error correction: no damaged bytes'
+      : `Error correction repaired ${state.ecc.corrected} of 128 bytes`;
+}
+
 // Character-by-character comparison. Recovered text comes from the server/image and is untrusted,
 // so it is rendered ONLY through textContent (never innerHTML).
 function renderMessageDiff(expected, recovered) {
@@ -926,11 +957,13 @@ function renderMessageDiff(expected, recovered) {
   const correct = exp.length - Math.min(wrong, exp.length);
   summary.hidden = false;
   summary.dataset.state = wrong === 0 ? 'pass' : 'fail';
-  const padNote = state.ber > 0
-    ? ` The ${Math.round(state.ber * 1024 / 100)} wrong bits fell in the unused padding after the message.` : '';
+  const fixedNote = state.ecc && state.ecc.ok && state.ecc.corrected > 0
+    ? ` Error correction repaired ${state.ecc.corrected} damaged bytes.` : '';
+  const failNote = state.ecc && !state.ecc.ok
+    ? ' Too many bytes were damaged for error correction, so this is an uncorrected best-effort read.' : '';
   summary.textContent = wrong === 0
-    ? `Exact match: all ${exp.length} characters recovered.${padNote}`
-    : `${correct} of ${exp.length} characters match. Wrong characters are highlighted; dots mark characters that were not recovered.`;
+    ? `Exact match: all ${exp.length} characters recovered.${fixedNote}`
+    : `${correct} of ${exp.length} characters match.${failNote} Wrong characters are highlighted; dots mark characters that were not recovered.`;
 }
 
 // Benchmark chart (SVG built with DOM APIs; colours come from CSS classes so both themes work).
@@ -1037,18 +1070,22 @@ function updateAcademicSummaryParagraph() {
   const ok = state.ber <= THRESHOLDS.ber;
   const exact = state.recoveredExact === true
     ? ' The recovered text matches the expected message exactly.'
-    : (state.recoveredExact === false ? ' The recovered text still contains errors (no error-correcting code is used yet).' : '');
+    : (state.recoveredExact === false ? ' The recovered text still contains errors.' : '');
+  const eccNote = !state.ecc ? ''
+    : state.ecc.ok
+      ? (state.ecc.corrected > 0 ? ` Reed-Solomon error correction repaired ${state.ecc.corrected} of 128 bytes.` : '')
+      : ' Reed-Solomon error correction failed because more than 32 of 128 bytes were damaged.';
   const attack = `<strong>${scalePct} ${algoName}</strong> downscaling`;
 
   let summary;
   if (state.method === 'lsb') {
     summary = ok
-      ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact} This is unusual for LSB and is not what the benchmark shows (48.00% average); check that the image was actually downscaled.`
-      : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact} Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.`;
+      ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is unusual for LSB and is not what the benchmark shows (48.00% average); check that the image was actually downscaled.`
+      : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.`;
   } else {
     summary = ok
-      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact} The benchmark average across 4,000 attacks is 1.15%.`
-      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact} This is worse than the 1.15% benchmark average. Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).`;
+      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across 4,000 attacks is 1.15%.`
+      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is worse than the 1.15% benchmark average. Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).`;
   }
   elements.evaluationSummaryText.innerHTML = summary;
 }
@@ -1140,7 +1177,7 @@ function initApp() {
   });
 
   elements.btnResetEmbedding.addEventListener('click', () => {
-    elements.secretMessageInput.value = "Deep Steganography hides messages within image features, maintaining robustness against Downscaling Attacks.";
+    elements.secretMessageInput.value = "Hidden message that survives downscaling.";
     updatePayloadMetrics();
     const thumbLena = document.querySelector('.sample-thumb-btn[data-sample="lena"]');
     if (thumbLena) thumbLena.click();
@@ -1281,7 +1318,7 @@ function initApp() {
     elements.reportDate.innerText = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const coverName = SAMPLE_NAMES[state.coverScene] ? `${SAMPLE_NAMES[state.coverScene]} (synthetic sample)` : state.coverScene;
     elements.reportCoverName.innerText = `${coverName}, 512x512 px`;
-    elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message) * 8} of 1024 bits)`;
+    elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message)} of ${MAX_MESSAGE_BYTES} bytes; 1024 bits with error correction)`;
 
     const scalePct = `${Math.round(state.attackScale * 100)}%`;
     const algoName = elements.downscaleAlgorithm.options[elements.downscaleAlgorithm.selectedIndex].text;
@@ -1304,8 +1341,10 @@ function initApp() {
       state.extracted ? (state.method === 'cnn' ? 'CNN encoder-decoder' : 'LSB') : '--';
     document.getElementById('report-run-ber').innerText =
       state.extracted && state.ber !== null ? `${state.ber.toFixed(2)}%` : '-- (no extraction with an expected message)';
+    const eccText = !state.ecc ? '' : state.ecc.ok
+      ? ` (error correction repaired ${state.ecc.corrected} of 128 bytes)` : ' (error correction failed)';
     document.getElementById('report-run-exact').innerText =
-      state.recoveredExact === true ? 'Yes' : state.recoveredExact === false ? 'No' : '--';
+      state.recoveredExact === true ? `Yes${eccText}` : state.recoveredExact === false ? `No${eccText}` : '--';
 
     elements.reportModal.classList.add('active');
     elements.btnCloseModal.focus();
