@@ -28,6 +28,9 @@ const BENCHMARK_BY_SIZE = {
   lsb:    [44.3, 49.2, 44.7, 49.4],
 };
 
+// Display names for the built-in synthetic sample drawings (keys = data-sample values).
+const SAMPLE_NAMES = { lena: 'Portrait', mandrill: 'Mandrill', satellite: 'Aerial', medical: 'Brain scan' };
+
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
 // The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
 const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
@@ -488,6 +491,7 @@ function updateStepProgress() {
   elements.navButtons.forEach(btn => {
     btn.classList.toggle('done', Boolean(done[btn.getAttribute('data-target')]));
   });
+  document.body.classList.toggle('has-embed', Boolean(state.embedded));
   const chip = document.getElementById('topbar-method');
   if (chip) chip.textContent = state.method === 'lsb' ? 'LSB' : 'CNN';
 }
@@ -649,11 +653,11 @@ async function runStegoPipeline() {
     drawResidualMap(elements.resultCoverCanvas, elements.resultStegoCanvas, elements.resultResidualCanvas);
 
     if (state.method === 'lsb') {
-      elements.methodTitleBadge.innerText = "Spatial LSB Steganography";
+      elements.methodTitleBadge.innerText = "LSB baseline";
       elements.methodDetailsText.innerText = "Least Significant Bit embedding injects message bitstream values directly into the lowest order bits of RGB color channels. While offering excellent image quality with close to zero visual distortions (high PSNR), it stores data in fragile pixel states that are easily destroyed by image scaling.";
       elements.cnnNetworkPreview.style.display = 'none';
     } else {
-      elements.methodTitleBadge.innerText = "CNN Encoder-Decoder Model";
+      elements.methodTitleBadge.innerText = "CNN encoder-decoder";
       elements.methodDetailsText.innerText = "The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The cost is image quality: about 32 dB PSNR, versus about 80 dB for LSB.";
       elements.cnnNetworkPreview.style.display = 'flex';
     }
@@ -683,7 +687,7 @@ async function runStegoPipeline() {
 // (nearest/bilinear/bicubic/lanczos/area) used in eval.py.
 async function runDownscalingAttack() {
   if (!state.stegoImgData) {
-    alert("Embed a message in Module 1, or upload a stego image here, first.");
+    alert("Embed a message in step 1, or upload a stego image here, first.");
     return;
   }
 
@@ -693,10 +697,14 @@ async function runDownscalingAttack() {
   elements.arrowScaleLabel.innerText = `${Math.round(state.attackScale * 100)}%`;
 
   await drawDataUrlToCanvas(elements.attackInputCanvas, state.stegoImgData);
+  elements.attackInputCanvas.dataset.loaded = '1';
 
-  elements.progressStatusText.innerText = `Running ${state.attackAlgo.toUpperCase()} interpolation kernel on server...`;
-  elements.attackProgressFill.style.width = `40%`;
-  elements.progressPercentage.innerText = `40%`;
+  const track = document.getElementById('attack-progress-track');
+  elements.progressStatusText.innerText = `Resizing with ${state.attackAlgo} on the server…`;
+  elements.progressPercentage.innerText = '';
+  elements.attackProgressFill.style.width = '0%';
+  track.classList.add('busy');
+  track.removeAttribute('aria-valuenow');
 
   try {
     const res = await apiFetch("/api/downscale", {
@@ -718,9 +726,12 @@ async function runDownscalingAttack() {
 
     await drawDataUrlToCanvas(elements.attackOutputCanvas, data.downscaled_image);
 
-    elements.attackProgressFill.style.width = `100%`;
-    elements.progressPercentage.innerText = `100%`;
-    elements.progressStatusText.innerText = "Attack completed successfully.";
+    track.classList.remove('busy');
+    track.setAttribute('aria-valuenow', '100');
+    elements.attackProgressFill.style.width = '100%';
+    elements.progressPercentage.innerText = `${data.size} × ${data.size} px`;
+    elements.progressStatusText.innerText = "Done.";
+    elements.attackOutputCanvas.dataset.loaded = '1';
 
     elements.btnContinueToExtraction.disabled = false;
     elements.btnContinueToExtraction.classList.remove('disabled');
@@ -736,6 +747,9 @@ async function runDownscalingAttack() {
   } catch (err) {
     const msg = describeFetchError(err);
     writeLog(`[ERROR] Downscale attack failed: ${msg}`, "error");
+    track.classList.remove('busy');
+    track.setAttribute('aria-valuenow', '0');
+    elements.progressStatusText.innerText = "Attack failed. See the activity log.";
     alert(`Downscale attack failed: ${msg}`);
   } finally {
     elements.btnSimulateAttack.disabled = false;
@@ -748,7 +762,7 @@ async function runDownscalingAttack() {
 // by comparing against the original message bits.
 async function runExtractionAndEvaluation() {
   if (!state.downscaledImgData) {
-    alert("Run the attack in Module 3, or upload an image on this page, first.");
+    alert("Run the attack in step 3, or upload an image on this page, first.");
     return;
   }
 
@@ -975,6 +989,38 @@ function renderBenchmarkChart() {
   host.replaceChildren(svg);
 }
 
+// UI-only setup: nothing here touches the server, auth or measured numbers.
+function initPhase3Ui() {
+  // Sample thumbnails show the actual drawings instead of unrelated gradients.
+  elements.sampleThumbButtons.forEach(btn => {
+    const thumb = btn.querySelector('.thumb-img');
+    if (!thumb) return;
+    const c = document.createElement('canvas');
+    c.width = 160; c.height = 160;
+    drawProceduralImage(c, btn.getAttribute('data-sample'));
+    thumb.style.backgroundImage = `url(${c.toDataURL('image/png')})`;
+    thumb.classList.add('thumb-drawn');
+  });
+
+  // Toggle-style buttons expose their state to screen readers (aria-pressed follows .active).
+  const pressables = document.querySelectorAll('.sample-thumb-btn, .source-btn, .mode-btn');
+  const sync = (el) => el.setAttribute('aria-pressed', el.classList.contains('active') ? 'true' : 'false');
+  pressables.forEach(sync);
+  const mo = new MutationObserver(records => records.forEach(r => sync(r.target)));
+  pressables.forEach(el => mo.observe(el, { attributes: true, attributeFilter: ['class'] }));
+
+  // Empty-state shortcuts.
+  document.querySelectorAll('[data-goto]').forEach(btn =>
+    btn.addEventListener('click', () => handleNavigation(btn.getAttribute('data-goto'))));
+
+  // Target ticks on the Page 2 gauges, from the same thresholds as everywhere else
+  // (the PSNR gauge spans 0-60 dB, the SSIM gauge 0-1, matching how the bars are filled).
+  const psnrTick = document.querySelector('[data-target-for="psnr"]');
+  const ssimTick = document.querySelector('[data-target-for="ssim"]');
+  if (psnrTick) psnrTick.style.left = `${(THRESHOLDS.psnr / 60) * 100}%`;
+  if (ssimTick) ssimTick.style.left = `${THRESHOLDS.ssim * 100}%`;
+}
+
 // Small exact-number table under the chart (the chart shows shape, this shows values).
 function renderSizeTable() {
   const row = (m) => `<tr><td><span class="method-cell ${m}-cell">${m.toUpperCase()}</span></td>` +
@@ -1040,7 +1086,7 @@ function initApp() {
       state.coverLoaded = true;
 
       drawProceduralImage(elements.coverCanvas, sampleType);
-      writeLog(`[INFO] Loaded sample cover image scene: '${sampleType.toUpperCase()}'`, "info");
+      writeLog(`[INFO] Sample '${SAMPLE_NAMES[sampleType] || sampleType}' loaded (synthetic drawing).`, "info");
     });
   });
 
@@ -1136,7 +1182,7 @@ function initApp() {
 
   elements.btnImportLatest.addEventListener('click', () => {
     if (!state.embedded) {
-      alert("No stego image has been embedded yet. Please complete Module 1 and 2.");
+      alert("No stego image yet. Embed a message in step 1 first.");
       return;
     }
     const miniCtx = elements.miniStegoCanvas.getContext('2d');
@@ -1147,6 +1193,7 @@ function initApp() {
     elements.attackInputCanvas.width = elements.resultStegoCanvas.width;
     elements.attackInputCanvas.height = elements.resultStegoCanvas.height;
     attInCtx.drawImage(elements.resultStegoCanvas, 0, 0);
+    elements.attackInputCanvas.dataset.loaded = '1';
 
     elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${state.method === 'cnn' ? 'Robust CNN' : 'Spatial LSB'}.`;
 
@@ -1173,7 +1220,7 @@ function initApp() {
 
   elements.btnImportAttacked.addEventListener('click', () => {
     if (!state.attackSimulated) {
-      alert("No downscaled image has been simulated. Please run Module 3.");
+      alert("No attacked image yet. Run the attack in step 3 first.");
       return;
     }
     const miniCtx = elements.miniDownscaledCanvas.getContext('2d');
@@ -1205,6 +1252,7 @@ function initApp() {
       state.stegoUploaded = true;
       updateStepProgress();
       await drawDataUrlToCanvas(elements.attackInputCanvas, dataUrl);
+      elements.attackInputCanvas.dataset.loaded = '1';
       drawMini(elements.miniStegoCanvas, elements.attackInputCanvas);
       elements.stegoSourceStatus.innerText = `Uploaded image loaded (${w}x${h}px).`;
       elements.btnSimulateAttack.disabled = false;
@@ -1231,7 +1279,8 @@ function initApp() {
 
   elements.btnExportReport.addEventListener('click', () => {
     elements.reportDate.innerText = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    elements.reportCoverName.innerText = `${state.coverScene.toUpperCase()} (512x512 px)`;
+    const coverName = SAMPLE_NAMES[state.coverScene] ? `${SAMPLE_NAMES[state.coverScene]} (synthetic sample)` : state.coverScene;
+    elements.reportCoverName.innerText = `${coverName}, 512x512 px`;
     elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message) * 8} of 1024 bits)`;
 
     const scalePct = `${Math.round(state.attackScale * 100)}%`;
@@ -1259,14 +1308,17 @@ function initApp() {
       state.recoveredExact === true ? 'Yes' : state.recoveredExact === false ? 'No' : '--';
 
     elements.reportModal.classList.add('active');
+    elements.btnCloseModal.focus();
   });
 
-  elements.btnCloseModal.addEventListener('click', () => {
+  const closeReport = () => {
     elements.reportModal.classList.remove('active');
-  });
-
-  elements.btnDismissModal.addEventListener('click', () => {
-    elements.reportModal.classList.remove('active');
+    elements.btnExportReport.focus();
+  };
+  elements.btnCloseModal.addEventListener('click', closeReport);
+  elements.btnDismissModal.addEventListener('click', closeReport);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && elements.reportModal.classList.contains('active')) closeReport();
   });
 
   elements.btnPrintDocument.addEventListener('click', () => {
@@ -1281,6 +1333,7 @@ function initApp() {
   renderBenchmarkChart();
   renderSizeTable();
   updateBenchmarkTable();
+  initPhase3Ui();
 }
 
 window.addEventListener('DOMContentLoaded', initApp);

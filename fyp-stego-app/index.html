@@ -13,7 +13,7 @@
     <form class="login-card" id="login-form" autocomplete="on">
       <div class="login-brand">
         <div class="logo-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg>
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg>
         </div>
         <h2>RobustStego</h2>
       </div>
@@ -35,7 +35,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg>
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg>
         </div>
         <div class="sidebar-title">
           <h2>RobustStego</h2>
@@ -48,25 +48,25 @@
         <ol class="step-list">
           <li>
             <button class="nav-btn active" data-target="page-embedding" aria-current="step">
-              <span class="step-num" aria-hidden="true"><span class="step-digit">1</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
+              <span class="step-num" aria-hidden="true"><span class="step-digit">1</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Embed message</span><span class="step-caption">Cover, message, method</span></span>
             </button>
           </li>
           <li>
             <button class="nav-btn" data-target="page-result">
-              <span class="step-num" aria-hidden="true"><span class="step-digit">2</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
+              <span class="step-num" aria-hidden="true"><span class="step-digit">2</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Review result</span><span class="step-caption">Image quality check</span></span>
             </button>
           </li>
           <li>
             <button class="nav-btn" data-target="page-downscaling">
-              <span class="step-num" aria-hidden="true"><span class="step-digit">3</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
+              <span class="step-num" aria-hidden="true"><span class="step-digit">3</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Downscaling attack</span><span class="step-caption">Resize the stego image</span></span>
             </button>
           </li>
           <li>
             <button class="nav-btn" data-target="page-extraction">
-              <span class="step-num" aria-hidden="true"><span class="step-digit">4</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
+              <span class="step-num" aria-hidden="true"><span class="step-digit">4</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Extract &amp; evaluate</span><span class="step-caption">Recover and measure BER</span></span>
             </button>
           </li>
@@ -90,14 +90,14 @@
           <div class="toggle-group">
             <span class="toggle-label">Academic Figures (Chapters)</span>
             <label class="switch">
-              <input type="checkbox" id="toggle-figures">
+              <input type="checkbox" id="toggle-figures" aria-label="Show academic figure captions">
               <span class="slider"></span>
             </label>
           </div>
           <div class="toggle-group">
             <span class="toggle-label">Dark Theme</span>
             <label class="switch">
-              <input type="checkbox" id="toggle-theme" checked>
+              <input type="checkbox" id="toggle-theme" checked aria-label="Dark theme">
               <span class="slider"></span>
             </label>
           </div>
@@ -130,7 +130,7 @@
             <div class="control-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   </svg>
                 </div>
@@ -142,31 +142,32 @@
                 <div class="form-section">
                   <label class="section-label">1. Cover image</label>
                   <div class="image-source-options">
-                    <button type="button" class="source-btn active" id="btn-use-sample">Sample image</button>
-                    <button type="button" class="source-btn" id="btn-trigger-upload">Upload your own</button>
+                    <button type="button" class="source-btn active" id="btn-use-sample" aria-pressed="true">Sample image</button>
+                    <button type="button" class="source-btn" id="btn-trigger-upload" aria-pressed="false">Upload your own</button>
                     <input type="file" id="cover-file-input" accept="image/*" style="display: none;">
                   </div>
                   
                   <div class="sample-selection">
                     <label class="field-hint">Choose a sample</label>
                     <div class="sample-grid">
-                      <button class="sample-thumb-btn active" data-sample="lena" title="Lena (Standard Academic Test Image)">
+                      <button class="sample-thumb-btn active" type="button" data-sample="lena" title="Portrait (synthetic drawing, 512&times;512)" aria-pressed="true">
                         <div class="thumb-img sample-lena-thumb"></div>
-                        <span>Lena (512x512)</span>
+                        <span>Portrait</span>
                       </button>
-                      <button class="sample-thumb-btn" data-sample="mandrill" title="Mandrill (High Frequency Texture)">
+                      <button class="sample-thumb-btn" type="button" data-sample="mandrill" title="Mandrill (synthetic drawing, 512&times;512)" aria-pressed="false">
                         <div class="thumb-img sample-mandrill-thumb"></div>
-                        <span>Mandrill (512x512)</span>
+                        <span>Mandrill</span>
                       </button>
-                      <button class="sample-thumb-btn" data-sample="satellite" title="Satellite/Aerial (Dense Information)">
+                      <button class="sample-thumb-btn" type="button" data-sample="satellite" title="Aerial (synthetic drawing, 512&times;512)" aria-pressed="false">
                         <div class="thumb-img sample-satellite-thumb"></div>
-                        <span>Satellite (512x512)</span>
+                        <span>Aerial</span>
                       </button>
-                      <button class="sample-thumb-btn" data-sample="medical" title="Medical MRI (Greyscale Contrast)">
+                      <button class="sample-thumb-btn" type="button" data-sample="medical" title="Brain scan (synthetic drawing, 512&times;512)" aria-pressed="false">
                         <div class="thumb-img sample-medical-thumb"></div>
-                        <span>Medical (512x512)</span>
+                        <span>Brain scan</span>
                       </button>
                     </div>
+                    <p class="field-note">These samples are simple synthetic drawings. The model was trained on natural photos, so expect higher BER on them; upload a photo for realistic results.</p>
                   </div>
                 </div>
 
@@ -208,14 +209,14 @@
                 <!-- Action Buttons -->
                 <div class="card-footer-actions">
                   <button id="btn-reset-embedding" class="btn btn-secondary">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M23 4v6h-6M1 20v-6h6" />
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                     </svg>
                     <span>Reset</span>
                   </button>
                   <button id="btn-embed-payload" class="btn btn-primary">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <rect x="3" y="11" width="18" height="10" rx="2" />
                       <path d="M12 2v9M8 5h8" />
                     </svg>
@@ -230,7 +231,7 @@
             <div class="preview-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
@@ -242,7 +243,7 @@
                 
                 <div class="preview-container">
                   <div class="canvas-wrapper">
-                    <canvas id="cover-canvas" width="512" height="512"></canvas>
+                    <canvas id="cover-canvas" width="512" height="512" role="img" aria-label="Cover image preview"></canvas>
                     <div class="resolution-badge">Cover: 512 × 512 px</div>
                   </div>
                 </div>
@@ -252,9 +253,9 @@
                   <div class="console-header">
                     <span class="console-title">Activity log</span>
                   </div>
-                  <div class="console-body" id="embedding-console">
+                  <div class="console-body" id="embedding-console" role="log" aria-live="polite" aria-label="Activity log">
                     <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
-                    <div class="log-line info">[INFO] Sample image 'Lena.png' loaded in workspace memory.</div>
+                    <div class="log-line info">[INFO] Sample 'Portrait' loaded (synthetic drawing).</div>
                     <div class="log-line info">[INFO] Payload capacity: 1,024 bits (128 bytes, up to 120 characters).</div>
                   </div>
                 </div>
@@ -279,31 +280,37 @@
             <div class="comparison-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
                 </div>
                 <h3><span class="fig-num">2.1</span> Cover vs stego</h3>
                 
                 <!-- Toggle Slider View vs Residual Noise Map -->
                 <div class="comparison-mode-selector">
-                  <button class="mode-btn active" id="btn-mode-side">Side-by-Side</button>
-                  <button class="mode-btn" id="btn-mode-residual">Residual Noise Map (&times;150)</button>
+                  <button type="button" class="mode-btn active" id="btn-mode-side" aria-pressed="true">Side by side</button>
+                  <button type="button" class="mode-btn" id="btn-mode-residual" aria-pressed="false">Difference map</button>
                 </div>
               </div>
               
               <div class="card-body comparison-views-wrapper">
+                <div class="empty-state" data-empty-for="embed">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <p class="empty-title">No stego image yet</p>
+                  <p class="empty-text">Embed a message in step 1 to compare the cover and stego images here.</p>
+                  <button type="button" class="btn btn-secondary btn-sm" data-goto="page-embedding">Go to step 1</button>
+                </div>
                 
                 <!-- Side by Side Layout -->
                 <div id="side-by-side-view" class="comparison-grid active">
                   <div class="comparison-pane">
-                    <span class="pane-tag">Original Cover (C)</span>
+                    <span class="pane-tag">Cover</span>
                     <div class="canvas-wrapper">
-                      <canvas id="result-cover-canvas" width="512" height="512"></canvas>
+                      <canvas id="result-cover-canvas" width="512" height="512" role="img" aria-label="Original cover image"></canvas>
                     </div>
                   </div>
                   <div class="comparison-pane">
-                    <span class="pane-tag stego-tag">Generated Stego (S)</span>
+                    <span class="pane-tag stego-tag">Stego (message hidden)</span>
                     <div class="canvas-wrapper">
-                      <canvas id="result-stego-canvas" width="512" height="512"></canvas>
+                      <canvas id="result-stego-canvas" width="512" height="512" role="img" aria-label="Stego image with the hidden message"></canvas>
                     </div>
                   </div>
                 </div>
@@ -311,9 +318,9 @@
                 <!-- Residual / Noise Map Layout (Hidden initially) -->
                 <div id="residual-map-view" class="residual-view-container">
                   <div class="residual-pane">
-                    <span class="pane-tag residual-tag">Embedding Difference Map (S - C)</span>
+                    <span class="pane-tag residual-tag">Difference: stego minus cover, &times;150</span>
                     <div class="canvas-wrapper">
-                      <canvas id="result-residual-canvas" width="512" height="512"></canvas>
+                      <canvas id="result-residual-canvas" width="512" height="512" role="img" aria-label="Difference between stego and cover, amplified 150 times"></canvas>
                     </div>
                     <p class="residual-desc">Absolute difference between stego and cover, amplified &times;150 so it is visible. LSB changes single pixel values; the CNN adds a small learned pattern across the image.</p>
                   </div>
@@ -332,10 +339,11 @@
                 <div class="metric-card">
                   <div class="metric-info">
                     <span class="metric-label">PSNR <span class="label-hint">cover vs stego</span></span>
-                    <span class="metric-val" id="metric-psnr">-- dB</span>
+                    <span class="metric-val" id="metric-psnr">--</span>
                   </div>
                   <div class="metric-gauge">
                     <div class="gauge-bar" id="psnr-bar" style="width: 0%;"></div>
+                    <span class="gauge-target" data-target-for="psnr" title="Project target"></span>
                   </div>
                   <div class="metric-desc">Higher means less visible change. Project target: 35 dB.</div>
                 </div>
@@ -348,16 +356,17 @@
                   </div>
                   <div class="metric-gauge">
                     <div class="gauge-bar" id="ssim-bar" style="width: 0%;"></div>
+                    <span class="gauge-target" data-target-for="ssim" title="Project target"></span>
                   </div>
                   <div class="metric-desc">1.0 means structurally identical. Project target: 0.95.</div>
                 </div>
 
                 <!-- Architecture Details Mini Card -->
                 <div class="info-card bg-glass">
-                  <h4 id="method-title-badge">Robust CNN Engine Selected</h4>
+                  <h4 id="method-title-badge">CNN encoder-decoder</h4>
                   <div class="method-diagram-preview" id="cnn-network-preview">
                     <!-- SVG diagram placeholder -->
-                    <img src="assets/network_diagram.svg" alt="Steganography Network Diagram">
+                    <a href="assets/network_diagram.svg" target="_blank" rel="noopener" title="Open the diagram full size"><img src="assets/network_diagram.svg" alt="Network diagram: cover and message go into the CNN encoder, the stego image is downscaled, and the CNN decoder recovers the message"></a>
                   </div>
                   <p id="method-details-text">The encoder and decoder were trained together with a differentiable downscaling layer between them, so the hidden bits survive resizing.</p>
                 </div>
@@ -367,7 +376,7 @@
               <!-- Action Card -->
               <div class="actions-card">
                 <button id="btn-download-stego" class="btn btn-secondary w-full">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
@@ -376,7 +385,7 @@
                 </button>
                 <button id="btn-go-to-downscaling" class="btn btn-primary w-full">
                   <span>Continue to downscaling attack</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="5" y1="12" x2="19" y2="12" />
                     <polyline points="12 5 19 12 12 19" />
                   </svg>
@@ -402,7 +411,7 @@
             <div class="control-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                 </div>
                 <h3><span class="fig-num">3.1</span> Attack settings</h3>
               </div>
@@ -414,28 +423,28 @@
 
                 <!-- Input Stego Image Source -->
                 <div class="form-section">
-                  <label class="section-label">Stego Image Input</label>
+                  <label class="section-label">Stego image</label>
                   <div class="stego-input-status">
                     <div class="mini-preview-wrap">
-                      <canvas id="mini-stego-canvas" width="64" height="64"></canvas>
-                      <span id="stego-source-status">No stego image generated yet.</span>
+                      <canvas id="mini-stego-canvas" width="64" height="64" aria-hidden="true"></canvas>
+                      <span id="stego-source-status">No stego image yet. Embed one in step 1, or upload one.</span>
                     </div>
-                    <button type="button" class="btn btn-secondary btn-sm" id="btn-import-latest">Import From Module 2</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-stego">Upload Image</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-import-latest">Use image from step 2</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-stego">Upload image</button>
                     <input type="file" id="stego-file-input" accept="image/png,image/jpeg" style="display: none;">
                   </div>
                 </div>
 
                 <!-- Select Downscaling Algorithm -->
                 <div class="form-section">
-                  <label class="section-label" for="downscale-algorithm">Resizing Algorithm</label>
+                  <label class="section-label" for="downscale-algorithm">Resize algorithm</label>
                   <div class="dropdown-wrapper">
                     <select id="downscale-algorithm" class="form-control">
-                      <option value="bicubic" selected>Bicubic Interpolation (Recommended / Standard Attack)</option>
-                      <option value="bilinear">Bilinear Interpolation</option>
-                      <option value="nearest">Nearest Neighbor (Aggressive Aliasing)</option>
-                      <option value="lanczos">Lanczos resampling (High-Fidelity Windowed Sinc)</option>
-                      <option value="area">Area-Based Resampling (Pixel Box Average)</option>
+                      <option value="bicubic" selected>Bicubic (common default)</option>
+                      <option value="bilinear">Bilinear</option>
+                      <option value="nearest">Nearest neighbour</option>
+                      <option value="lanczos">Lanczos (not seen in training)</option>
+                      <option value="area">Area (pixel averaging)</option>
                     </select>
                   </div>
                 </div>
@@ -482,7 +491,7 @@
                 <!-- Simulation Trigger -->
                 <div class="form-actions-bar">
                   <button id="btn-simulate-attack" class="btn btn-primary btn-large w-full">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                     <span>Run downscaling attack</span>
@@ -492,7 +501,7 @@
                 <!-- Attack Information Card -->
                 <div class="info-card attack-math bg-dark-glass">
                   <h4>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-inline">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-inline">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="16" x2="12" y2="12" />
                       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -513,7 +522,7 @@
             <div class="preview-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8" />
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     <line x1="11" y1="8" x2="11" y2="14" />
@@ -527,9 +536,10 @@
                 <div class="downscaling-visual-grid">
                   
                   <div class="downscale-pane flex-2">
-                    <span class="pane-tag">Input Stego (512&times;512)</span>
+                    <span class="pane-tag">Before: 512 px</span>
                     <div class="canvas-wrapper bg-checkered">
-                      <canvas id="attack-input-canvas" width="512" height="512"></canvas>
+                      <canvas id="attack-input-canvas" width="512" height="512" role="img" aria-label="Stego image before the attack"></canvas>
+                      <p class="pane-empty" data-empty-for="stego">No stego image loaded</p>
                     </div>
                   </div>
 
@@ -540,9 +550,10 @@
                   </div>
 
                   <div class="downscale-pane flex-1">
-                    <span class="pane-tag">Downscaled Attack Output</span>
+                    <span class="pane-tag">After resize</span>
                     <div class="canvas-wrapper bg-checkered" id="downscaled-canvas-container">
-                      <canvas id="attack-output-canvas" width="256" height="256"></canvas>
+                      <canvas id="attack-output-canvas" width="256" height="256" role="img" aria-label="Stego image after the downscaling attack"></canvas>
+                      <p class="pane-empty" data-empty-for="attack">Run the attack to see the result</p>
                     </div>
                   </div>
 
@@ -550,10 +561,10 @@
 
                 <div class="pipeline-progress-bar">
                   <div class="progress-info">
-                    <span id="progress-status-text">Ready to run downscaling simulation...</span>
-                    <span id="progress-percentage">0%</span>
+                    <span id="progress-status-text">Not run yet.</span>
+                    <span id="progress-percentage"></span>
                   </div>
-                  <div class="progress-bar-track">
+                  <div class="progress-bar-track" id="attack-progress-track" role="progressbar" aria-label="Attack progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                     <div class="progress-bar-fill" id="attack-progress-fill" style="width: 0%;"></div>
                   </div>
                 </div>
@@ -562,7 +573,7 @@
                 <div class="simulation-actions">
                   <button id="btn-continue-to-extraction" class="btn btn-primary w-full disabled" disabled>
                     <span>Continue to extraction</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="5" y1="12" x2="19" y2="12" />
                       <polyline points="12 5 19 12 12 19" />
                     </svg>
@@ -589,7 +600,7 @@
             <div class="control-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="11" width="18" height="10" rx="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
@@ -600,11 +611,11 @@
                 
                 <div class="stego-input-status">
                   <div class="mini-preview-wrap">
-                    <canvas id="mini-downscaled-canvas" width="64" height="64"></canvas>
-                    <span id="downscaled-import-status">No downscaled image imported.</span>
+                    <canvas id="mini-downscaled-canvas" width="64" height="64" aria-hidden="true"></canvas>
+                    <span id="downscaled-import-status">No attacked image yet. Run step 3, or upload one.</span>
                   </div>
-                  <button type="button" class="btn btn-secondary btn-sm" id="btn-import-attacked">Import Attacked Image</button>
-                  <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-attacked">Upload Image</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-import-attacked">Use image from step 3</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-attacked">Upload image</button>
                   <input type="file" id="attacked-file-input" accept="image/png,image/jpeg" style="display: none;">
                 </div>
 
@@ -624,7 +635,7 @@
 
                 <div class="form-actions-bar">
                   <button id="btn-extract-message" class="btn btn-primary w-full">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <rect x="3" y="11" width="18" height="10" rx="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
@@ -640,7 +651,7 @@
                       <span class="ber-value" id="extract-ber">--</span>
                       <span class="ber-bits" id="ber-bits"></span>
                     </div>
-                    <div class="ber-hero-side">
+                    <div class="ber-hero-side" aria-live="polite">
                       <span class="ber-verdict" id="ber-verdict">Run an extraction to measure BER.</span>
                       <span class="ber-target">Target: &le; <span id="ber-target-value">5</span>% of bits wrong</span>
                       <div class="m-indicator" id="ber-status-indicator" aria-hidden="true"></div>
@@ -691,7 +702,7 @@
             <div class="preview-card">
               <div class="card-header">
                 <div class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 20V10M18 20V4M6 20v-4" />
                   </svg>
                 </div>
@@ -744,7 +755,7 @@
                 <!-- Export Options -->
                 <div class="actions-card border-none padding-none margin-top-20">
                   <button id="btn-export-report" class="btn btn-secondary w-full">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                       <line x1="16" y1="13" x2="8" y2="13" />
@@ -772,11 +783,11 @@
   </div>
 
   <!-- MODAL: EXPORT REPORT -->
-  <div class="modal" id="report-modal">
+  <div class="modal" id="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Generated Steganography Robustness Report</h3>
-        <button class="close-modal-btn" id="btn-close-modal">&times;</button>
+        <h3 id="report-modal-title">Robustness report</h3>
+        <button type="button" class="close-modal-btn" id="btn-close-modal" aria-label="Close report">&times;</button>
       </div>
       <div class="modal-body academic-report-document" id="report-document-print">
         <div class="report-document-header">
