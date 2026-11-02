@@ -39,6 +39,7 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from models import Encoder, Decoder
 from downscale import cv2_downscale_numpy
 from lsb_baseline import lsb_embed, lsb_extract
+from classical_stego import dct_embed, dct_extract, dwt_embed, dwt_extract
 from payload import MAX_MESSAGE_BYTES, MESSAGE_BITS as PAYLOAD_BITS, MessageTooLong, decode_payload, encode_message
 
 import config
@@ -121,8 +122,10 @@ def decode_base64_image_raw(data_url: str) -> np.ndarray:
     try:
         raw = base64.b64decode(data_url, validate=True)
         img = Image.open(io.BytesIO(raw))
-        if img.format not in ("PNG", "JPEG"):
+        if img.format not in ("PNG", "JPEG", "WEBP"):      # WEBP: WhatsApp stickers are 512x512 WebP
             raise ValueError("unsupported format")
+        if getattr(img, "n_frames", 1) > 1:                 # animated WebP/PNG: not a stego image, don't decode frames
+            raise ValueError("animated images are not supported")
         w, h = img.size            # header only, nothing decoded yet -> blocks decompression bombs
         if not (32 <= w <= 1280 and 32 <= h <= 1280):
             raise ValueError("image dimensions out of range")
@@ -169,7 +172,7 @@ MAX_IMG_CHARS = 5_500_000   # ~4 MB of base64
 class EmbedRequest(BaseModel):
     cover_image: str = Field(max_length=MAX_IMG_CHARS)
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_BYTES)
-    method: Literal["cnn", "lsb"]
+    method: Literal["cnn", "lsb", "dct", "dwt"]
 
 
 class EmbedResponse(BaseModel):
@@ -191,7 +194,7 @@ class DownscaleResponse(BaseModel):
 
 class ExtractRequest(BaseModel):
     image: str = Field(max_length=MAX_IMG_CHARS)
-    method: Literal["cnn", "lsb"]
+    method: Literal["cnn", "lsb", "dct", "dwt"]
     original_message: str = Field(default="", max_length=MAX_MESSAGE_BYTES)
     cover_image: str = Field(default="", max_length=MAX_IMG_CHARS)
 
@@ -227,6 +230,10 @@ def embed(request: Request, req: EmbedRequest, user: AdminUser = Depends(require
         with torch.no_grad():
             stego_t = encoder(cover_t, msg_t)
         stego_np = to_uint8_array(stego_t.squeeze(0))
+    elif req.method == "dct":
+        stego_np = dct_embed(cover_np, bits)
+    elif req.method == "dwt":
+        stego_np = dwt_embed(cover_np, bits)
     else:  # lsb
         stego_np = lsb_embed(cover_np, bits)
 
@@ -263,6 +270,10 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
         with torch.no_grad():
             probs = decoder(img_t)
         bits = (probs.squeeze(0).cpu().numpy() > 0.5).astype(np.uint8)
+    elif req.method in ("dct", "dwt"):
+        # Classical decoders need the block grid of the 512x512 cover: they resize the attacked image
+        # back to 512 (bicubic) themselves before reading (classical_stego.restore_size).
+        bits = dct_extract(img_np) if req.method == "dct" else dwt_extract(img_np)
     else:  # lsb
         bits = lsb_extract(img_np, MESSAGE_BITS)
 

@@ -65,6 +65,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/config.yaml")
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--init-from", default=None,
+                        help="start from these encoder/decoder weights with a fresh optimizer and epoch 0 "
+                             "(fine-tuning with a new loss; unlike --resume it does not continue the old run)")
     parser.add_argument("--message-bits", type=int, default=None, help="override config.message.bits (for ablation runs)")
     args = parser.parse_args()
 
@@ -130,10 +133,20 @@ def main():
         start_epoch = ckpt["epoch"] + 1
         best_ber = ckpt.get("best_ber", 1.0)
         print(f"Resumed from {args.resume} at epoch {start_epoch}")
+    elif args.init_from:
+        ckpt = torch.load(args.init_from, map_location=device)
+        encoder.load_state_dict(ckpt["encoder"])
+        decoder.load_state_dict(ckpt["decoder"])
+        print(f"Initialised weights from {args.init_from} (fresh optimizer, epoch 0)")
+
+    lambda_chroma = cfg["loss"].get("lambda_chroma", 0.0)
+    min_val_psnr = cfg["train"].get("min_val_psnr")   # if set, only epochs at or above this PSNR can become best.pt
+    print(f"Loss: perceptual={cfg['loss']['lambda_perceptual']} mse={cfg['loss']['lambda_mse']} "
+          f"chroma={lambda_chroma} | best.pt needs val PSNR >= {min_val_psnr if min_val_psnr else 'any'}")
 
     for epoch in range(start_epoch, cfg["train"]["epochs"]):
         t0 = time.time()
-        running = {"bce": 0.0, "perceptual": 0.0, "total": 0.0}
+        running = {"bce": 0.0, "perceptual": 0.0, "chroma": 0.0, "total": 0.0}
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg['train']['epochs']}")
 
         for step, (cover, message) in enumerate(pbar):
@@ -154,6 +167,7 @@ def main():
                 lambda_perceptual=cfg["loss"]["lambda_perceptual"],
                 lambda_mse=cfg["loss"]["lambda_mse"],
                 bce_weight=cfg["loss"]["bce_weight"],
+                lambda_chroma=lambda_chroma,
             )
 
             scaler.scale(loss).backward()
@@ -182,12 +196,15 @@ def main():
         }
         torch.save(ckpt, ckpt_dir / "last.pt")
 
-        if val_ber < best_ber:
+        eligible = min_val_psnr is None or val_psnr >= min_val_psnr
+        if eligible and val_ber < best_ber:
             best_ber = val_ber
             patience_counter = 0
             torch.save(ckpt, ckpt_dir / "best.pt")
-            print(f"  -> new best (BER={best_ber:.4f}), saved checkpoints/best.pt")
+            print(f"  -> new best (BER={best_ber:.4f}), saved {ckpt_dir / 'best.pt'}")
         else:
+            if not eligible:
+                print(f"  (not eligible for best.pt: val PSNR {val_psnr:.2f} < {min_val_psnr})")
             patience_counter += 1
             if patience_counter >= cfg["train"]["early_stop_patience"]:
                 print(f"Early stopping: no improvement for {patience_counter} epochs.")

@@ -11,7 +11,7 @@
 | JWT forgery / alg=none | Algorithm pinned to HS256, required claims, typ check, 32+ char secret enforced | security.py, config.py |
 | CSRF | SameSite=Strict + X-Requested-With header + Origin allow-list | auth_routes.py |
 | SQL injection | SQLAlchemy ORM only (parameterised) | db.py |
-| Malicious input / DoS | Pydantic Literal/range/length limits, PNG/JPEG only, 32-1280px, decompression-bomb guard, 12 MB body cap, per-endpoint rate limits | server.py |
+| Malicious input / DoS | Pydantic Literal/range/length limits, PNG/JPEG/WebP only (animated files rejected), 32-1280px, decompression-bomb guard, 12 MB body cap, per-endpoint rate limits | server.py |
 | XSS / clickjacking / sniffing | CSP, X-Frame-Options, nosniff, no-store, HSTS (when HTTPS) | server.py |
 | Data exposure via Supabase REST | RLS on all 4 tables, no policies for anon/authenticated, all their privileges revoked | supabase_hardening.sql |
 | Compromised app server abusing the DB | App connects as least-privilege role `stego_app` (not the owner): no DDL, cannot create admins or change password hashes, no deletes | supabase_hardening.sql - verified by tests/test_db_privileges.py (17/17) |

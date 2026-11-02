@@ -28,11 +28,44 @@ const BENCHMARK_BY_SIZE = {
   lsb:    [44.3, 49.2, 44.7, 49.4],
 };
 
+// The four embedding methods. Every label in the UI reads from here.
+// bench: true only where REFERENCE holds DIV2K (eval.py) numbers; DCT/DWT are not benchmarked on DIV2K yet.
+const METHODS = {
+  cnn: {
+    short: 'CNN', long: 'CNN encoder-decoder', bench: true,
+    log: 'Running CNN encoder (trained model, checkpoints/best.pt)...',
+    details: 'The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The cost is image quality: about 32 dB PSNR, versus about 80 dB for LSB.',
+    failHint: 'Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).',
+  },
+  lsb: {
+    short: 'LSB', long: 'LSB baseline', bench: true,
+    log: 'Running spatial LSB embed (lowest bit plane)...',
+    details: 'Least Significant Bit embedding writes each message bit into the lowest bit of a pixel value. The change is invisible (about 80 dB PSNR), but resizing recomputes every pixel value, so those exact bits do not survive.',
+    failHint: 'Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.',
+  },
+  dct: {
+    short: 'DCT', long: 'DCT (coefficient pair)', bench: false,
+    log: 'Running DCT embed (8x8 blocks, coefficient pair (2,3)/(3,2))...',
+    details: 'Classical frequency-domain method. The luminance is split into 8x8 blocks; each bit sets the order of two mid-frequency DCT coefficients in one block. Those frequencies mostly survive downscaling, with more errors at smaller sizes. About 41 dB PSNR at the default strength.',
+    failHint: 'The DCT pair sits close to the highest frequency a small output keeps, so errors grow at 224-256 px and on fine textures.',
+  },
+  dwt: {
+    short: 'DWT', long: 'DWT (LL-band QIM)', bench: false,
+    log: 'Running DWT embed (4-level Haar, LL-band QIM)...',
+    details: 'Classical wavelet method. A 4-level Haar transform gives one low-frequency coefficient per 16x16 block; each bit is set by quantising that coefficient (QIM), which shifts the block brightness slightly. Block averages survive averaging resizes very well. About 41 dB PSNR at the default step.',
+    failHint: 'The DWT relies on block averages; nearest-neighbour resizing keeps single pixels instead of averaging them, which is its known weak case.',
+  },
+};
+const methodInfo = (m) => METHODS[m] || METHODS.cnn;
+
 // Display names for the built-in synthetic sample drawings (keys = data-sample values).
 const SAMPLE_NAMES = { lena: 'Portrait', mandrill: 'Mandrill', satellite: 'Aerial', medical: 'Brain scan' };
 
 // Payload layout (must match payload.py): 63 message bytes + 1 length byte + 64 Reed-Solomon parity bytes.
 const MAX_MESSAGE_BYTES = 63;
+
+// Attack size as the supervisor asked: "25% smaller" rather than "75%" (width and height).
+const smallerLabel = (scale) => `${Math.round((1 - scale) * 100)}% smaller`;
 
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
 // The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
@@ -495,7 +528,7 @@ function updateStepProgress() {
   });
   document.body.classList.toggle('has-embed', Boolean(state.embedded));
   const chip = document.getElementById('topbar-method');
-  if (chip) chip.textContent = state.method === 'lsb' ? 'LSB' : 'CNN';
+  if (chip) chip.textContent = methodInfo(state.method).short;
 }
 
 // Button labels live in a <span> so changing the text never deletes the icon.
@@ -584,12 +617,12 @@ function describeFetchError(err) {
 
 // ----------------------------------------------------------- real pipeline steps
 
-// Reads + validates an uploaded PNG/JPEG. Returns the ORIGINAL bytes as a data URL (not re-encoded via
+// Reads + validates an uploaded PNG/JPEG/WebP (WebP = WhatsApp sticker). Returns the ORIGINAL bytes as a data URL (not re-encoded via
 // canvas, which would silently alter pixels - important when testing Telegram/JPEG round-trips).
 function readImageFile(file) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error("No file selected."));
-    if (!["image/png", "image/jpeg"].includes(file.type)) return reject(new Error("Only PNG or JPEG images are accepted."));
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return reject(new Error("Only PNG, JPEG or WebP images are accepted."));
     if (file.size > 4 * 1024 * 1024) return reject(new Error("File too large (max 4 MB)."));
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read the file."));
@@ -635,12 +668,7 @@ async function runStegoPipeline() {
   try {
     const coverDataUrl = elements.coverCanvas.toDataURL('image/png');
 
-    writeLog(
-      state.method === 'cnn'
-        ? "[INFO] Running CNN Encoder (trained model, checkpoints/best.pt)..."
-        : "[INFO] Running spatial LSB embed (8th bit plane)...",
-      "info"
-    );
+    writeLog(`[INFO] ${methodInfo(state.method).log}`, "info");
 
     const res = await apiFetch("/api/embed", {
       method: "POST",
@@ -665,22 +693,16 @@ async function runStegoPipeline() {
     await drawDataUrlToCanvas(elements.resultStegoCanvas, data.stego_image);
     drawResidualMap(elements.resultCoverCanvas, elements.resultStegoCanvas, elements.resultResidualCanvas);
 
-    if (state.method === 'lsb') {
-      elements.methodTitleBadge.innerText = "LSB baseline";
-      elements.methodDetailsText.innerText = "Least Significant Bit embedding injects message bitstream values directly into the lowest order bits of RGB color channels. While offering excellent image quality with close to zero visual distortions (high PSNR), it stores data in fragile pixel states that are easily destroyed by image scaling.";
-      elements.cnnNetworkPreview.style.display = 'none';
-    } else {
-      elements.methodTitleBadge.innerText = "CNN encoder-decoder";
-      elements.methodDetailsText.innerText = "The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The cost is image quality: about 32 dB PSNR, versus about 80 dB for LSB.";
-      elements.cnnNetworkPreview.style.display = 'flex';
-    }
+    elements.methodTitleBadge.innerText = methodInfo(state.method).long;
+    elements.methodDetailsText.innerText = methodInfo(state.method).details;
+    elements.cnnNetworkPreview.style.display = state.method === 'cnn' ? 'flex' : 'none';
 
     elements.metricPsnr.innerText = `${state.psnr.toFixed(2)} dB`;
     elements.metricSsim.innerText = state.ssim.toFixed(4);
     elements.psnrBar.style.width = `${Math.min(100, (state.psnr / 60) * 100)}%`;
     elements.ssimBar.style.width = `${state.ssim * 100}%`;
 
-    elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${state.method === 'cnn' ? 'Robust CNN' : 'Spatial LSB'}.`;
+    elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${methodInfo(state.method).long}.`;
     elements.btnSimulateAttack.disabled = false;
 
     writeLog(`[SUCCESS] Steganographic embedding complete. PSNR: ${state.psnr.toFixed(2)}dB, SSIM: ${state.ssim.toFixed(4)}`, "success");
@@ -707,7 +729,7 @@ async function runDownscalingAttack() {
   writeLog("[ATTACK] Sending stego image to server for real downscale attack...", "system");
   elements.btnSimulateAttack.disabled = true;
   setBtnLabel(elements.btnSimulateAttack, "Resizing…");
-  elements.arrowScaleLabel.innerText = `${Math.round(state.attackScale * 100)}%`;
+  elements.arrowScaleLabel.innerText = smallerLabel(state.attackScale);
 
   await drawDataUrlToCanvas(elements.attackInputCanvas, state.stegoImgData);
   elements.attackInputCanvas.dataset.loaded = '1';
@@ -824,7 +846,7 @@ async function runExtractionAndEvaluation() {
     renderMessageDiff(expected, data.recovered_message);
     updateBerHero(berKnown);
     elements.extractedMsgLabel.innerText =
-      state.method === 'lsb' ? "Recovered message (LSB decoder)" : "Recovered message (CNN decoder)";
+      `Recovered message (${methodInfo(state.method).short} decoder)`;
 
     // Real PSNR/SSIM: cover vs. (the actual downscaled image, upscaled back
     // to 512x512 for this comparison only). Computed server-side with the
@@ -859,7 +881,7 @@ async function runExtractionAndEvaluation() {
 function updateBenchmarkTable() {
   const fmtBer = (v) => `${v.toFixed(2)}%`;
   const verdict = (v) => (v <= THRESHOLDS.ber ? 'better-val' : 'worse-val');
-  const name = (m) => (m === 'cnn' ? 'CNN' : 'LSB');
+  const name = (m) => methodInfo(m).short;
   const benchRow = (m) => {
     const ref = REFERENCE[m];
     return `<tr>
@@ -880,15 +902,18 @@ function updateBenchmarkTable() {
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
   const attack = state.downscaledUploaded
     ? 'uploaded image'
-    : `${Math.round(state.attackScale * 100)}% ${algoName}`;
-  const other = state.method === 'cnn' ? 'lsb' : 'cnn';
+    : `${algoName}, ${smallerLabel(state.attackScale)}`;
+  const benchRows = METHODS[state.method].bench
+    ? benchRow(state.method) + benchRow(state.method === 'cnn' ? 'lsb' : 'cnn')
+    : benchRow('cnn') + benchRow('lsb') +
+      `<tr><td colspan="4" class="cell-note">${name(state.method)} is not yet benchmarked on DIV2K; run tools/benchmark_methods.py.</td></tr>`;
 
   elements.evaluationTableRows.innerHTML = `<tr class="run-row">
       <td><span class="method-cell ${state.method}-cell">${name(state.method)}</span><span class="cell-sub">this run &middot; ${attack}</span></td>
       <td class="${verdict(state.ber)}">${fmtBer(state.ber)}</td>
       <td>${embeddedHere ? `${state.psnr.toFixed(2)} dB` : '--'}</td>
       <td>${embeddedHere ? state.ssim.toFixed(4) : '--'}</td>
-    </tr>` + benchRow(state.method) + benchRow(other);
+    </tr>` + benchRows;
 }
 
 // Headline BER card. States: idle (nothing yet), na (no expected message), pass, fail.
@@ -994,7 +1019,7 @@ function renderBenchmarkChart() {
   BENCHMARK_BY_SIZE.sizes.forEach((px, i) => {
     svg.appendChild(el('text', { x: xs[i], y: H - B + 18, 'text-anchor': 'middle', class: 'chart-tick' }, `${px} px`));
     svg.appendChild(el('text', { x: xs[i], y: H - B + 32, 'text-anchor': 'middle', class: 'chart-tick chart-tick-sub' },
-      `${Math.round(BENCHMARK_BY_SIZE.scales[i] * 100)}%`));
+      smallerLabel(BENCHMARK_BY_SIZE.scales[i])));
   });
 
   for (const m of ['lsb', 'cnn']) {
@@ -1065,7 +1090,7 @@ function renderSizeTable() {
 // (against THRESHOLDS.ber), so a failed run is never described as a success.
 function updateAcademicSummaryParagraph() {
   const algoName = state.attackAlgo.charAt(0).toUpperCase() + state.attackAlgo.slice(1);
-  const scalePct = `${Math.round(state.attackScale * 100)}%`;
+  const sizePx = Math.round(512 * state.attackScale);
   const ber = state.ber.toFixed(2);
   const ok = state.ber <= THRESHOLDS.ber;
   const exact = state.recoveredExact === true
@@ -1075,17 +1100,22 @@ function updateAcademicSummaryParagraph() {
     : state.ecc.ok
       ? (state.ecc.corrected > 0 ? ` Reed-Solomon error correction repaired ${state.ecc.corrected} of 128 bytes.` : '')
       : ' Reed-Solomon error correction failed because more than 32 of 128 bytes were damaged.';
-  const attack = `<strong>${scalePct} ${algoName}</strong> downscaling`;
+  const attack = `a <strong>${algoName}</strong> resize to <strong>${sizePx} px (${smallerLabel(state.attackScale)})</strong>`;
 
+  const info = methodInfo(state.method);
   let summary;
   if (state.method === 'lsb') {
     summary = ok
       ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is unusual for LSB and is not what the benchmark shows (48.00% average); check that the image was actually downscaled.`
-      : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.`;
+      : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} ${info.failHint}`;
+  } else if (state.method === 'cnn') {
+    summary = ok
+      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across 2,000 attacks is 1.15%.`
+      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is worse than the 1.15% benchmark average. ${info.failHint}`;
   } else {
     summary = ok
-      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across 4,000 attacks is 1.15%.`
-      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is worse than the 1.15% benchmark average. Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).`;
+      ? `The ${info.long} decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote}`
+      : `The ${info.long} decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} ${info.failHint}`;
   }
   elements.evaluationSummaryText.innerHTML = summary;
 }
@@ -1232,7 +1262,7 @@ function initApp() {
     attInCtx.drawImage(elements.resultStegoCanvas, 0, 0);
     elements.attackInputCanvas.dataset.loaded = '1';
 
-    elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${state.method === 'cnn' ? 'Robust CNN' : 'Spatial LSB'}.`;
+    elements.stegoSourceStatus.innerText = `Stego loaded. Method: ${methodInfo(state.method).long}.`;
 
     writeLog("[INFO] Imported latest stego output image as attack simulator source.", "info");
   });
@@ -1320,13 +1350,12 @@ function initApp() {
     elements.reportCoverName.innerText = `${coverName}, 512x512 px`;
     elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message)} of ${MAX_MESSAGE_BYTES} bytes; 1024 bits with error correction)`;
 
-    const scalePct = `${Math.round(state.attackScale * 100)}%`;
     const algoName = elements.downscaleAlgorithm.options[elements.downscaleAlgorithm.selectedIndex].text;
 
     const attacked = state.attackSimulated && !state.downscaledUploaded;
     elements.reportTableAlgo.innerText = attacked ? algoName : (state.downscaledUploaded ? 'Uploaded image (attack not run in this app)' : '--');
     elements.reportTableScale.innerText = attacked
-      ? `${scalePct} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)` : '--';
+      ? `${smallerLabel(state.attackScale)} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)` : '--';
 
     // Benchmark rows: always the real eval.py averages (REFERENCE), never per-run numbers.
     elements.reportLsbBer.innerText = `${REFERENCE.lsb.ber.toFixed(2)}%`;
@@ -1338,7 +1367,7 @@ function initApp() {
 
     // This session's run: only what was actually measured; "--" when a step wasn't done.
     document.getElementById('report-run-method').innerText =
-      state.extracted ? (state.method === 'cnn' ? 'CNN encoder-decoder' : 'LSB') : '--';
+      state.extracted ? methodInfo(state.method).long : '--';
     document.getElementById('report-run-ber').innerText =
       state.extracted && state.ber !== null ? `${state.ber.toFixed(2)}%` : '-- (no extraction with an expected message)';
     const eccText = !state.ecc ? '' : state.ecc.ok

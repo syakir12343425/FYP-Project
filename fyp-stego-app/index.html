@@ -203,6 +203,22 @@
                         <span class="method-tag tag-std">Baseline</span>
                       </div>
                     </label>
+                    <label class="method-card">
+                      <input type="radio" name="embedding-method" value="dct">
+                      <div class="method-content">
+                        <span class="method-title">DCT (Classical)</span>
+                        <span class="method-desc">Orders two mid-frequency DCT coefficients in an 8&times;8 block per bit. About 41 dB PSNR.</span>
+                        <span class="method-tag tag-std">Frequency domain</span>
+                      </div>
+                    </label>
+                    <label class="method-card">
+                      <input type="radio" name="embedding-method" value="dwt">
+                      <div class="method-content">
+                        <span class="method-title">DWT (Classical)</span>
+                        <span class="method-desc">Quantises one Haar low-frequency coefficient per 16&times;16 block. About 41 dB PSNR; weak against nearest-neighbour.</span>
+                        <span class="method-tag tag-std">Wavelet domain</span>
+                      </div>
+                    </label>
                   </div>
                 </div>
 
@@ -431,7 +447,7 @@
                     </div>
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-import-latest">Use image from step 2</button>
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-stego">Upload image</button>
-                    <input type="file" id="stego-file-input" accept="image/png,image/jpeg" style="display: none;">
+                    <input type="file" id="stego-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
                   </div>
                 </div>
 
@@ -455,19 +471,21 @@
                      No "beyond tested range" options — every result shown here
                      is backed by real evaluation data. -->
                 <div class="form-section">
-                  <label class="section-label">Output size <span class="label-hint">(benchmarked sizes only)</span></label>
+                  <label class="section-label">How much smaller <span class="label-hint">(benchmarked sizes only)</span></label>
                   <div class="scale-factor-selector">
                     <label class="scale-option">
                       <input type="radio" name="scale-factor" value="0.75">
                       <div class="scale-box">
-                        <span class="percentage">75%</span>
+                        <span class="percentage">25%</span>
+                        <span class="smaller-word">smaller</span>
                         <span class="dimensions">384 &times; 384 px</span>
                       </div>
                     </label>
                     <label class="scale-option">
                       <input type="radio" name="scale-factor" value="0.58398438">
                       <div class="scale-box">
-                        <span class="percentage">58%</span>
+                        <span class="percentage">42%</span>
+                        <span class="smaller-word">smaller</span>
                         <span class="dimensions">299 &times; 299 px</span>
                       </div>
                     </label>
@@ -475,17 +493,20 @@
                       <input type="radio" name="scale-factor" value="0.5" checked>
                       <div class="scale-box">
                         <span class="percentage">50%</span>
+                        <span class="smaller-word">smaller</span>
                         <span class="dimensions">256 &times; 256 px</span>
                       </div>
                     </label>
                     <label class="scale-option">
                       <input type="radio" name="scale-factor" value="0.4375">
                       <div class="scale-box">
-                        <span class="percentage">44%</span>
+                        <span class="percentage">56%</span>
+                        <span class="smaller-word">smaller</span>
                         <span class="dimensions">224 &times; 224 px</span>
                       </div>
                     </label>
                   </div>
+                  <p class="field-note">Smaller in both width and height, starting from 512 &times; 512 px. For example, 50% smaller keeps a quarter of the pixels.</p>
                 </div>
 
                 <!-- Simulation Trigger -->
@@ -587,7 +608,7 @@
 
           <!-- Caption for Figure 4.3 -->
           <div class="academic-caption" id="caption-4-3">
-            <strong>Figure 4.3:</strong> Downscaling Attack Simulation module, highlighted as the main feature of the system, displaying stego image input configuration, selection of interpolation kernels (Nearest Neighbor, Bilinear, Bicubic, Lanczos, and Area-based), the four benchmarked scale settings (75%, 58%, 50%, 44% of 512 px, i.e. 384/299/256/224 px), and the resulting downscaled preview.
+            <strong>Figure 4.3:</strong> Downscaling Attack Simulation module, highlighted as the main feature of the system, displaying stego image input configuration, selection of interpolation kernels (Nearest Neighbor, Bilinear, Bicubic, Lanczos, and Area-based), the four benchmarked output sizes (25%, 42%, 50% and 56% smaller than 512 px, i.e. 384/299/256/224 px), and the resulting downscaled preview.
           </div>
         </section>
 
@@ -616,7 +637,7 @@
                   </div>
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-import-attacked">Use image from step 3</button>
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-attacked">Upload image</button>
-                  <input type="file" id="attacked-file-input" accept="image/png,image/jpeg" style="display: none;">
+                  <input type="file" id="attacked-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
                 </div>
 
                 <div class="form-section">
@@ -624,6 +645,8 @@
                   <select id="extract-method" class="form-control">
                     <option value="cnn" selected>CNN Decoder (Robust)</option>
                     <option value="lsb">LSB Extraction (Standard)</option>
+                    <option value="dct">DCT Extraction (Classical)</option>
+                    <option value="dwt">DWT Extraction (Classical)</option>
                   </select>
                 </div>
                 <div class="form-section">
@@ -725,12 +748,14 @@
                     </div>
                   </div>
                   <div class="svg-chart-wrapper" id="svg-chart-wrapper"></div>
+                  <div class="table-scroll">
                   <table class="academic-table size-table" aria-label="Benchmark BER per output size">
                     <thead>
                       <tr><th>Output size</th><th>384 px</th><th>299 px</th><th>256 px</th><th>224 px</th></tr>
                     </thead>
                     <tbody id="size-table-rows"></tbody>
                   </table>
+                  </div>
                   <p class="residual-desc chart-note">
                     Mean BER over 100 validation images &times; 5 resize algorithms (eval.py). These four sizes are
                     the only ones used in training and testing, so the attack page is limited to them.
@@ -818,7 +843,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr class="report-subhead"><td colspan="3"><strong>Benchmark</strong> (eval.py: 100 images &times; 5 algorithms &times; 4 sizes = 4,000 attacks per method)</td></tr>
+            <tr class="report-subhead"><td colspan="3"><strong>Benchmark</strong> (eval.py: 100 images &times; 5 algorithms &times; 4 sizes = 2,000 attacks per method)</td></tr>
             <tr>
               <td>Embedding PSNR (avg)</td>
               <td id="report-lsb-psnr">--</td>

@@ -614,6 +614,8 @@ textarea.form-control,
 .scale-option input:focus-visible + .scale-box { outline: 2px solid var(--accent); outline-offset: 2px; }
 .percentage { font-size: var(--text-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .dimensions { font-size: var(--text-xs); color: var(--text-3); font-family: var(--font-mono); }
+.smaller-word { font-size: var(--text-sm); font-weight: 600; color: var(--text-2); margin-top: -2px; }
+.scale-option input:checked + .scale-box .smaller-word { color: var(--accent-text); }
 
 /* image source row with mini preview (pages 3 and 4) */
 .stego-input-status {
@@ -801,6 +803,7 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 0 var(--space-2);
+  white-space: nowrap;
 }
 
 .pipeline-progress-bar { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -966,10 +969,12 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .run-label.fail { fill: var(--danger); }
 .svg-chart-wrapper svg { width: 100%; height: auto; overflow: visible; }
 
+.table-scroll { overflow-x: auto; max-width: 100%; }
 .size-table td, .size-table th { text-align: right; }
 .size-table td:first-child, .size-table th:first-child { text-align: left; }
 .size-table td { padding: var(--space-2) var(--space-3); }
 
+.cell-note { font-size: var(--text-xs); color: var(--text-3); }
 .cell-sub { display: block; font-size: var(--text-xs); color: var(--text-3); font-weight: 400; }
 .academic-table .run-row td { background: var(--accent-soft); }
 
