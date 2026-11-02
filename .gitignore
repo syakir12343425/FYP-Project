@@ -9,3 +9,4 @@ results/
 .ipynb_checkpoints/
 .env
 *.db
+*.patch
