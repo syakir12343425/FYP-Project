@@ -58,9 +58,10 @@
 
 ### Upgrading an existing database to multi-user (once)
 - SQLite: nothing to do, the server adds the columns on start (existing accounts become admins).
-- Supabase: switch .env to the OWNER url, `python tools/migrate_users.py`, re-run supabase_hardening.sql
-  (v3, with the same SCRAM verifier line as before), switch .env back to stego_app,
-  `python tests/test_db_privileges.py`.
+- Supabase: paste supabase_multiuser_v3.sql into the SQL editor and Run (it adds the columns, the grants
+  and the trigger, and does not touch the stego_app password), then `python tests/test_db_privileges.py`.
+  Checked on a local Postgres 16 with the v2 setup: re-runnable; stego_app can create/reset/disable normal
+  users only; creating, resetting, disabling or promoting to admin is refused.
 
 ### Supabase (hosted Postgres, least privilege)
 1. Create the project (region: Southeast Asia / Singapore). Connect > Direct > **Session pooler** (port 5432).
