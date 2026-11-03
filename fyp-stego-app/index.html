@@ -322,7 +322,7 @@
                       <input type="radio" name="embedding-method" value="cnn" checked>
                       <div class="method-content">
                         <span class="method-title">CNN Encoder-Decoder (Robust)</span>
-                        <span class="method-desc">Trained with a differentiable downscaling layer. Survives resizing; about 37 dB PSNR.</span>
+                        <span class="method-desc">Trained against resizing and WhatsApp-style compression. About 35.5 dB PSNR.</span>
                         <span class="method-tag tag-ai">Robust</span>
                       </div>
                     </label>
@@ -845,7 +845,7 @@
                     <p id="evaluation-summary-text">
                       Run an extraction to see this session's result. For reference, the DIV2K benchmark
                       (100 images &times; 5 algorithms &times; 4 sizes, 224&ndash;384 px) measured an average BER of
-                      2.00% for the CNN, 4.19% for DCT, 7.14% for DWT and 45.43% for LSB, which is no better than guessing.
+                      1.76% for the CNN, 4.19% for DCT, 7.14% for DWT and 45.43% for LSB, which is no better than guessing.
                     </p>
                   </div>
                 </div>
@@ -1015,7 +1015,7 @@
         </table>
 
         <h4>3. Methodological Discussion</h4>
-        <p>LSB steganography writes each message bit into the least significant bit of a pixel value. Downscaling resamples and averages neighbouring pixels, so those exact bits do not survive, and extraction is no better than guessing (about 45% BER). The CNN encoder adds a small learned residual (at most about 3% of the pixel range) to the cover image. During training, a differentiable downscaling layer (nearest, bilinear, bicubic and area, to 224&ndash;384 px, with 8-bit quantisation) sat between encoder and decoder, so both networks learned a representation that survives resizing. Lanczos was held out of training and still decodes at a similar error rate. The first trained model hid the message mostly in colour, which left a visible tint (about 32 dB PSNR); the model used here was fine-tuned with an extra penalty on colour change and reaches about 37 dB PSNR, versus about 80 dB for LSB. Each message is protected with Reed&ndash;Solomon error correction (RS(128,64) over GF(2<sup>8</sup>): 63 message bytes plus 64 parity bytes, repairing up to 32 damaged bytes) and then whitened with a fixed public keystream; whitening is not encryption. The bit error rate reported here is the raw rate before error correction.</p>
+        <p>LSB steganography writes each message bit into the least significant bit of a pixel value. Downscaling resamples and averages neighbouring pixels, so those exact bits do not survive, and extraction is no better than guessing (about 45% BER). The CNN encoder adds a small learned residual (at most about 3% of the pixel range) to the cover image. During training, a differentiable downscaling layer (nearest, bilinear, bicubic and area, to 224&ndash;384 px, with 8-bit quantisation) sat between encoder and decoder, so both networks learned a representation that survives resizing. Lanczos was held out of training and still decodes at a similar error rate. The first trained model hid the message mostly in colour, which left a visible tint (about 32 dB PSNR); the model used here was fine-tuned with an extra penalty on colour change and with WhatsApp-style attacks (JPEG, WebP and no resize) added to training. It reaches about 35.5 dB PSNR, versus about 80 dB for LSB; a faint colour pattern can still be seen in large white areas when zoomed in. Each message is protected with Reed&ndash;Solomon error correction (RS(128,64) over GF(2<sup>8</sup>): 63 message bytes plus 64 parity bytes, repairing up to 32 damaged bytes) and then whitened with a fixed public keystream; whitening is not encryption. The bit error rate reported here is the raw rate before error correction.</p>
 
         <div class="report-signature">
           <div class="sig-line"></div>

@@ -1,7 +1,7 @@
 """
 Inference server for the FYP steganography frontend.
 
-Loads the trained CNN (checkpoints_chroma/best.pt) once at startup and exposes three
+Loads the trained CNN (checkpoints_channel_l300/best.pt, "model D") once at startup and exposes three
 endpoints that map directly onto the four pages of index.html:
 
     POST /api/embed       cover image + message + method -> stego image + psnr/ssim
@@ -9,7 +9,7 @@ endpoints that map directly onto the four pages of index.html:
     POST /api/extract     image + method + original message -> recovered message + ber
 
 Run it from inside the fyp_stego/ folder (so `models.py`, `downscale.py`,
-`lsb_baseline.py` are importable, and `checkpoints_chroma/best.pt` exists next to it):
+`lsb_baseline.py` are importable, and `checkpoints_channel_l300/best.pt` exists next to it):
 
     pip install fastapi uvicorn pillow scikit-image python-multipart opencv-python-headless
     uvicorn server:app --reload --host 0.0.0.0 --port 8000
@@ -48,11 +48,13 @@ from db import AdminUser, SessionLocal, audit, get_db, init_db
 
 MESSAGE_BITS = 1024          # must match training (configs/config.yaml -> message.bits)
 assert MESSAGE_BITS == PAYLOAD_BITS, "payload.py and server.py disagree on payload size"
-# The app's CNN (3 Nov 2026): the colour-penalty fine-tuned model (run 1, epoch 1), chosen on the
-# independent Kodak24 test (Results log section 7). The first model stays in checkpoints/best.pt for
+# The app's CNN (3 Nov 2026): "model D" = colour penalty (lambda_chroma 300) + messaging-app attacks
+# (JPEG/WebP/no-resize) in training, configs/channel.yaml (Results log section 9c-2). Chosen over model A
+# (checkpoints_chroma, best image quality but WhatsApp sticker success only 14/24) and model C
+# (checkpoints_channel, same robustness but a more visible tint). Older models stay in their folders for
 # experiments. The UI's REFERENCE numbers in app.js were measured for THIS checkpoint; if you change it,
 # re-run tools/benchmark_methods.py and update them, or the UI will show numbers for a different model.
-CHECKPOINT_PATH = "checkpoints_chroma/best.pt"
+CHECKPOINT_PATH = "checkpoints_channel_l300/best.pt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 is_prod = config.ENV == "prod"

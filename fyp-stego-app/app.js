@@ -14,13 +14,13 @@ const API_BASE = "http://localhost:8000"; // use your HTTPS API domain on the VP
 // Real aggregate numbers, all four methods from ONE tool and the same attacks (3 Nov 2026):
 // tools/benchmark_methods.py --images data/DIV2K_valid_HR --limit 100
 // = 100 DIV2K validation images x 5 algorithms x 4 sizes = 2,000 attacks per method.
-// CNN = colour-penalty fine-tuned model (checkpoints_chroma/best.pt, results/div2k_cnn_chroma_e1.csv);
+// CNN = model D: colour penalty + messaging-app training (checkpoints_channel_l300/best.pt, results/div2k_cnn_D.csv);
 // LSB/DCT/DWT = results/div2k_methods_default.csv (DCT T=50, DWT S=128, the server defaults).
 // exact = share of attacks where the whole message was recovered after Reed-Solomon.
 // Used as reference values in the comparison table / report so the UI never shows invented numbers.
 const BENCH_ATTACKS = 2000;
 const REFERENCE = {
-  cnn: { ber: 2.00, psnr: 36.62, ssim: 0.9824, exact: 86.2 },
+  cnn: { ber: 1.76, psnr: 35.54, ssim: 0.9767, exact: 88.9 },
   lsb: { ber: 45.43, psnr: 79.98, ssim: 1.0000, exact: 0.0 },
   dct: { ber: 4.19, psnr: 40.12, ssim: 0.9739, exact: 64.0 },
   dwt: { ber: 7.14, psnr: 40.76, ssim: 0.9885, exact: 70.3 },
@@ -30,7 +30,7 @@ const REFERENCE = {
 const BENCHMARK_BY_SIZE = {
   sizes:  [384, 299, 256, 224],
   scales: [0.75, 0.58398438, 0.5, 0.4375],   // must match the Page 3 radio values
-  cnn:    [1.59, 2.02, 2.05, 2.35],
+  cnn:    [1.30, 1.73, 1.85, 2.15],
   lsb:    [39.56, 45.56, 47.12, 49.48],
   dct:    [0.90, 4.06, 3.15, 8.65],
   dwt:    [4.95, 7.41, 4.72, 11.47],
@@ -41,8 +41,8 @@ const BENCHMARK_BY_SIZE = {
 const METHODS = {
   cnn: {
     short: 'CNN', long: 'CNN encoder-decoder', bench: true,
-    log: 'Running CNN encoder (colour-penalty model, checkpoints_chroma/best.pt)...',
-    details: 'The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The first model hid the message mostly in colour and left a visible tint (about 32 dB PSNR); this model was fine-tuned with a penalty on colour change, giving about 37 dB PSNR.',
+    log: 'Running CNN encoder (model D, checkpoints_channel_l300/best.pt)...',
+    details: 'The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The first model hid the message mostly in colour and left a visible tint (about 32 dB PSNR). This model was fine-tuned with a penalty on colour change and with WhatsApp-style attacks (JPEG, WebP, no resize) added to training: about 35.5 dB PSNR, and a faint colour pattern can still be seen in large white areas when zoomed in.',
     failHint: 'Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).',
   },
   lsb: {
@@ -76,7 +76,7 @@ const MAX_MESSAGE_BYTES = 63;
 const smallerLabel = (scale) => `${Math.round((1 - scale) * 100)}% smaller`;
 
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
-// The first CNN (~32 dB) was below the 35 dB target; the colour-penalty model (36.62 dB) meets it.
+// The first CNN (~32 dB) was below the 35 dB target; model D (35.54 dB on DIV2K) meets it.
 const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
 
 // Payload size is counted in UTF-8 BYTES (what the server embeds), not JS string length.
