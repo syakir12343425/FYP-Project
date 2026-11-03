@@ -695,6 +695,8 @@ async function runDownscalingAttack() {
 
     elements.btnContinueToExtraction.disabled = false;
     elements.btnContinueToExtraction.classList.remove('disabled');
+    state.lastAttack = { algo: state.attackAlgo, size: data.size };
+    document.getElementById('btn-download-resized').disabled = false;
 
     elements.downscaledImportStatus.innerText = `Attacked image loaded (${data.size}x${data.size}px). Ready.`;
 
@@ -1499,6 +1501,16 @@ function initApp() {
   });
 
   elements.btnSimulateAttack.addEventListener('click', runDownscalingAttack);
+
+  // Download the resized image exactly as the server returned it (PNG, lossless; no canvas re-encode).
+  document.getElementById('btn-download-resized').addEventListener('click', () => {
+    if (!state.downscaledImgData || !state.lastAttack) return;
+    const link = document.createElement('a');
+    link.download = `resized_${state.method}_${state.lastAttack.algo}_${state.lastAttack.size}px.png`;
+    link.href = state.downscaledImgData;
+    link.click();
+    writeLog(`[INFO] Resized image downloaded (${state.lastAttack.size}x${state.lastAttack.size}px, ${state.lastAttack.algo}).`, 'info');
+  });
 
   elements.btnContinueToExtraction.addEventListener('click', () => {
     elements.btnImportAttacked.click();

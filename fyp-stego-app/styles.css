@@ -1328,3 +1328,4 @@ body[data-mode="results"] .mode-read { display: none; }
   background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: var(--radius-md); }
 .skip-link:focus { left: var(--space-3); }
 #topbar-heading:focus, #main-content:focus { outline: none; }  /* focused by script on page change, not by the user */
+.simulation-actions.stacked { flex-direction: column; }

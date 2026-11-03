@@ -809,13 +809,22 @@
                 </div>
 
                 <!-- Simulation actions -->
-                <div class="simulation-actions">
+                <div class="simulation-actions stacked">
                   <button id="btn-continue-to-extraction" class="btn btn-primary w-full disabled" disabled>
                     <span>Continue to extraction</span>
                     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="5" y1="12" x2="19" y2="12" />
                       <polyline points="12 5 19 12 12 19" />
                     </svg>
+                  </button>
+                  <!-- Saves the exact PNG the server returned (no re-encoding), e.g. to test it in Read mode or send it. -->
+                  <button id="btn-download-resized" class="btn btn-secondary w-full" disabled>
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Download resized image</span>
                   </button>
                 </div>
 
