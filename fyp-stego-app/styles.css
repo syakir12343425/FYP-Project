@@ -1304,3 +1304,17 @@ body[data-mode="results"] .mode-read { display: none; }
 #results-bench-rows td:not(:first-child),
 #results-sticker-rows td:nth-child(2),
 #results-sticker-rows td:nth-child(3) { white-space: nowrap; }
+
+/* Design round 3 (3 Nov 2026): one border level --------------------------------------------
+   Cards keep their border; panels INSIDE a card get a soft fill instead of a second border.
+   Borders stay where they carry meaning: inputs, buttons, choice cards (method/sample/size),
+   images (.canvas-wrapper), empty drop zones (dashed) and the coloured pass/fail result card. */
+.info-card,
+.stego-input-status,
+.status-console-card,
+.downscaling-visual-grid { border: none; }
+.mini-metric-card { border: none; background: var(--surface-2); }
+.flat-tip { border: none; background: var(--surface-2); }
+.svg-chart-wrapper { border: none; padding: 0; background: transparent; }
+.ber-hero[data-state="idle"],
+.ber-hero[data-state="na"] { border-color: transparent; }
