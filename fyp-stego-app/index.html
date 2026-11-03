@@ -26,6 +26,16 @@
       <div class="login-error" id="login-error" role="alert"></div>
       <button type="submit" class="btn btn-primary w-full" id="login-submit">Sign in</button>
     </form>
+    <!-- Second step of signing in (two-step verification) -->
+    <form class="login-card" id="login-mfa-form" autocomplete="off" hidden>
+      <h2>Two-step verification</h2>
+      <p class="login-sub">Open your authenticator app and type the 6-digit code for RobustStego. Lost your phone? Type one of your recovery codes instead.</p>
+      <label for="login-mfa-code">Code</label>
+      <input id="login-mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="32" spellcheck="false" required>
+      <div class="login-error" id="login-mfa-error" role="alert"></div>
+      <button type="submit" class="btn btn-primary w-full" id="login-mfa-submit">Verify</button>
+      <div class="password-secondary"><button type="button" class="link-btn" id="login-mfa-back">Back to sign in</button></div>
+    </form>
   </div>
 
   <!-- CHOOSE / CHANGE PASSWORD. Forced (no Cancel) when an admin created or reset the account. -->
@@ -74,7 +84,7 @@
             <span class="slider"></span>
           </label>
           <span class="site-user">Signed in as <strong id="current-user">-</strong></span>
-          <button type="button" class="link-btn user-only" id="btn-change-password">Change password</button>
+          <button type="button" class="site-link" data-goto="page-account" data-mode-link="account">Account</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Log out</button>
         </div>
       </div>
@@ -198,13 +208,106 @@
               <div class="card-header"><h3>Accounts</h3><span class="card-header-note" id="users-count"></span></div>
               <div class="card-body">
                 <p class="login-error" id="users-error" role="alert"></p>
+                <p class="users-mfa-needed" id="users-mfa-needed" hidden>Turn on two-step verification before managing accounts.
+                  <button type="button" class="btn btn-primary btn-sm" data-goto="page-account">Go to Account</button></p>
                 <div class="table-scroll">
                   <table class="academic-table users-table" aria-label="Accounts">
-                    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead>
-                    <tbody id="users-tbody"><tr><td colspan="5" class="cell-note">Loading&hellip;</td></tr></tbody>
+                    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Two-step</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody id="users-tbody"><tr><td colspan="6" class="cell-note">Loading&hellip;</td></tr></tbody>
                   </table>
                 </div>
                 <p class="field-hint">Admin accounts can only be added or reset on the server with <code>python create_admin.py</code>. Accounts are disabled rather than deleted, so the audit log keeps pointing at real people.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= ACCOUNT: two-step verification and password ================= -->
+        <section id="page-account" class="viewport">
+          <div class="users-layout">
+            <div class="control-card">
+              <div class="card-header"><h3>Two-step verification</h3><span class="status-pill" id="mfa-pill"></span></div>
+              <div class="card-body mfa-body">
+                <p class="field-hint mfa-required-note" id="mfa-required-note" hidden>Admins must turn this on before they can manage accounts.</p>
+
+                <!-- off -->
+                <div id="mfa-off" hidden>
+                  <p>After your password, the app will also ask for a 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, Authy or similar). Someone who learns your password still cannot sign in.</p>
+                  <button type="button" class="btn btn-primary" id="mfa-start">Turn on two-step verification</button>
+                </div>
+
+                <!-- set-up, step 1: password -->
+                <form id="mfa-step-password" class="mfa-form" hidden>
+                  <label class="section-label" for="mfa-setup-password">Confirm your password to start</label>
+                  <div class="user-create-row">
+                    <input id="mfa-setup-password" class="form-control" type="password" autocomplete="current-password" maxlength="128" required>
+                    <button type="submit" class="btn btn-primary">Continue</button>
+                  </div>
+                  <p class="login-error" id="mfa-setup-error" role="alert"></p>
+                  <button type="button" class="link-btn mfa-cancel">Cancel</button>
+                </form>
+
+                <!-- set-up, step 2: scan and confirm -->
+                <form id="mfa-step-scan" class="mfa-form" hidden>
+                  <ol class="mfa-steps">
+                    <li>In your authenticator app, add an account and scan this code.</li>
+                    <li>Type the 6-digit code the app shows.</li>
+                  </ol>
+                  <div class="mfa-scan">
+                    <img id="mfa-qr" alt="QR code to scan with your authenticator app" width="220" height="220" hidden>
+                    <div class="mfa-manual">
+                      <p class="field-hint">Cannot scan? Choose "enter a setup key" in the app and type:</p>
+                      <code id="mfa-secret" class="mfa-secret"></code>
+                      <label class="section-label" for="mfa-enable-code">6-digit code</label>
+                      <div class="user-create-row">
+                        <input id="mfa-enable-code" class="form-control mfa-code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+                        <button type="submit" class="btn btn-primary">Turn on</button>
+                      </div>
+                      <p class="login-error" id="mfa-enable-error" role="alert"></p>
+                    </div>
+                  </div>
+                  <button type="button" class="link-btn mfa-cancel">Cancel</button>
+                </form>
+
+                <!-- recovery codes, shown once -->
+                <div id="mfa-codes" class="temp-password" hidden aria-live="polite">
+                  <p class="temp-password-title">Your recovery codes</p>
+                  <p class="field-hint">If you lose your phone, each code lets you sign in once. Save them somewhere safe now: they are not shown again.</p>
+                  <ol class="recovery-list" id="mfa-codes-list"></ol>
+                  <div class="mfa-codes-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="mfa-codes-copy">Copy</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="mfa-codes-download">Download as text file</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="mfa-codes-done">I have saved them</button>
+                  </div>
+                </div>
+
+                <!-- on -->
+                <div id="mfa-on" hidden>
+                  <p>Two-step verification is on. <span id="mfa-codes-left"></span></p>
+                  <form id="mfa-manage" class="mfa-form">
+                    <p class="field-hint">To get new recovery codes or turn this off, confirm your password and a current code.</p>
+                    <div class="mfa-manage-row">
+                      <div><label class="section-label" for="mfa-manage-password">Password</label>
+                        <input id="mfa-manage-password" class="form-control" type="password" autocomplete="current-password" maxlength="128" required></div>
+                      <div><label class="section-label" for="mfa-manage-code">Code from the app</label>
+                        <input id="mfa-manage-code" class="form-control mfa-code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="32" required></div>
+                    </div>
+                    <p class="login-error" id="mfa-manage-error" role="alert"></p>
+                    <div class="mfa-codes-actions">
+                      <button type="submit" class="btn btn-secondary" data-mfa-action="codes">Get new recovery codes</button>
+                      <button type="submit" class="btn btn-danger-outline" data-mfa-action="disable" id="mfa-disable">Turn off</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="card-header"><h3>Password</h3></div>
+              <div class="card-body">
+                <p class="user-only">Other devices where you are signed in will be signed out when you change it.</p>
+                <button type="button" class="btn btn-secondary user-only" id="btn-change-password">Change password</button>
+                <p class="admin-only field-hint">Admin passwords are changed on the server with <code>python create_admin.py</code>.</p>
               </div>
             </div>
           </div>

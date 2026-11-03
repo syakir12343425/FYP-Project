@@ -1470,3 +1470,29 @@ body[data-role="admin"] .user-only { display: none; }
 #user-create-error:empty, #users-error:empty { display: none; }
 #users-error { margin-bottom: var(--space-3); }
 .users-table .user-actions-cell { text-align: right; }
+
+/* ================= Two-step verification (Nov 2026) ================= */
+body[data-mode="account"] .mode-hide,
+body[data-mode="account"] .mode-read,
+body[data-mode="account"] .mode-results { display: none; }
+.mfa-body p { line-height: 1.6; color: var(--text-2); max-width: 75ch; }
+.mfa-body > div > p, .mfa-form > p { margin-bottom: var(--space-3); }
+.mfa-form .link-btn { margin-top: var(--space-2); }
+.mfa-steps { margin: 0 0 var(--space-4) var(--space-5); color: var(--text-2); line-height: 1.7; }
+.mfa-scan { display: flex; gap: var(--space-6); align-items: flex-start; flex-wrap: wrap; }
+.mfa-scan img { border-radius: var(--radius-md); border: 1px solid var(--border); background: #fff; padding: 4px; }
+.mfa-manual { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: var(--space-2); }
+.mfa-secret { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; padding: var(--space-2) var(--space-3);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); width: fit-content; user-select: all; overflow-wrap: anywhere; }
+.mfa-code-input { font-family: var(--font-mono); letter-spacing: 0.2em; max-width: 180px; }
+.recovery-list { columns: 2; column-gap: var(--space-6); margin: var(--space-3) 0 var(--space-4) var(--space-5);
+  font-family: var(--font-mono); font-size: var(--text-md); line-height: 1.9; color: var(--text); }
+.mfa-codes-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mfa-manage-row { display: flex; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.mfa-manage-row > div { display: flex; flex-direction: column; gap: var(--space-1); }
+.mfa-on { color: var(--success); font-weight: 600; }
+.users-mfa-needed { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3);
+  border-radius: var(--radius-md); background: var(--warning-soft, rgba(234, 179, 8, 0.15)); color: var(--text); }
+#login-mfa-form h2 { font-size: var(--text-lg); font-weight: 700; }
+#login-mfa-code { font-family: var(--font-mono); letter-spacing: 0.15em; font-size: var(--text-md); }
+@media (max-width: 600px) { .recovery-list { columns: 1; } }

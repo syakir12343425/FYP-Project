@@ -33,6 +33,12 @@ MUST_WORK = [
                                        "values ('priv_test_user', 'x', 'user', 0, now()) returning id"),
     ("set a normal user's password",   "update admin_users set password_hash = 'x', must_change_password = true where role = 'user'"),
     ("disable a normal user",          "update admin_users set disabled = true where role = 'user'"),
+    # v4, two-step verification
+    ("set up two-step for a user",     "update admin_users set mfa_pending_enc = 'x', mfa_pending_at = now() where role = 'user'"),
+    ("record a used code (time step)", "update admin_users set mfa_last_step = mfa_last_step where id = -1"),
+    ("add a recovery code",            "insert into mfa_recovery_codes (user_id, code_hash, created_at) "
+                                       "select id, 'priv_test', now() from admin_users limit 1 returning id"),
+    ("mark a recovery code used",      "update mfa_recovery_codes set used_at = now() where id = -1"),
 ]
 
 MUST_FAIL = [
@@ -48,9 +54,18 @@ MUST_FAIL = [
     ("delete admin accounts",          "delete from admin_users where id = -1"),
     ("delete refresh tokens",          "delete from refresh_tokens where id = -1"),
     ("un-revoke a token family",       "delete from revoked_families where family_id = 'x'"),
+    ("delete recovery codes",          "delete from mfa_recovery_codes where id = -1"),
+    ("change a recovery code hash",    "update mfa_recovery_codes set code_hash = 'x' where id = -1"),
     ("drop a table",                   "drop table audit_log"),
     ("disable row level security",     "alter table audit_log disable row level security"),
     ("create a new table",             "create table public.evil (id int)"),
+]
+
+
+# Only meaningful once an admin has two-step verification on (otherwise no row matches the trigger).
+MUST_FAIL_IF_ADMIN_MFA = [
+    ("turn off an admin's two-step",   "update admin_users set mfa_enabled = false where role = 'admin' and mfa_enabled"),
+    ("replace an admin's MFA secret",  "update admin_users set mfa_secret_enc = 'x' where role = 'admin' and mfa_enabled"),
 ]
 
 
@@ -93,7 +108,18 @@ def main():
         failures += not refused
         print(f"  [{'PASS' if refused else 'FAIL'}] {name:32s} {info}")
 
+    with engine.connect() as conn:
+        admin_mfa = conn.execute(text("select count(*) from admin_users where role = 'admin' and mfa_enabled")).scalar()
     total = len(MUST_WORK) + len(MUST_FAIL)
+    if admin_mfa:
+        for name, sql in MUST_FAIL_IF_ADMIN_MFA:
+            ok, info = attempt(engine, sql)
+            refused = (not ok) and info.startswith("refused")
+            failures += not refused
+            total += 1
+            print(f"  [{'PASS' if refused else 'FAIL'}] {name:32s} {info}")
+    else:
+        print("  [SKIP] admin two-step checks: no admin has two-step verification on yet (turn it on, re-run)")
     print(f"\nRESULT: {total - failures}/{total} checks passed" + ("" if failures else " - least privilege holds"))
     sys.exit(1 if failures else 0)
 

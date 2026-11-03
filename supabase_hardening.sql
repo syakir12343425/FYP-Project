@@ -1,5 +1,5 @@
 -- =====================================================================================
--- supabase_hardening.sql  (v3: multi-user accounts, Nov 2026)  -  run ONCE in the Supabase SQL editor, as the owner,
+-- supabase_hardening.sql  (v4: multi-user accounts + two-step verification, Nov 2026)  -  run ONCE in the Supabase SQL editor, as the owner,
 -- AFTER `python create_admin.py` has created the tables
 -- (upgrading from v2: run `python tools/migrate_users.py` with the owner URL first).
 --
@@ -123,8 +123,34 @@ begin
                                or new.must_change_password is distinct from old.must_change_password) then
         raise exception 'stego_app may not change admin accounts' using errcode = '42501';
     end if;
+    if old.role = 'admin' and old.mfa_enabled and (new.mfa_enabled is distinct from old.mfa_enabled
+                                                   or new.mfa_secret_enc is distinct from old.mfa_secret_enc) then
+        raise exception 'stego_app may not turn off or replace an admin''s two-step verification' using errcode = '42501';
+    end if;
     return new;
 end $$;
+
+-- -------------------------------------------------------------------------------------
+-- 3c. Two-step verification (v4): recovery-code table locked down like the others,
+--     stego_app may set up / turn off MFA and mark recovery codes used. Never delete.
+-- -------------------------------------------------------------------------------------
+-- 2. Close the Supabase REST door on the new table, as for the others ------------------
+alter table public.mfa_recovery_codes enable row level security;
+revoke all on public.mfa_recovery_codes from anon, authenticated;
+revoke all on sequence public.mfa_recovery_codes_id_seq from anon, authenticated;
+
+-- 3. What stego_app may do -------------------------------------------------------------
+-- admin_users: set up / turn off two-step verification, record the last used time step.
+grant update (mfa_enabled, mfa_secret_enc, mfa_pending_enc, mfa_pending_at, mfa_last_step)
+    on public.admin_users to stego_app;
+grant insert (mfa_enabled, mfa_secret_enc, mfa_pending_enc, mfa_pending_at, mfa_last_step)
+    on public.admin_users to stego_app;
+-- recovery codes: add new ones, mark one as used. Never delete, never change a hash.
+grant select, insert on public.mfa_recovery_codes to stego_app;
+grant update (used_at) on public.mfa_recovery_codes to stego_app;
+grant usage on sequence public.mfa_recovery_codes_id_seq to stego_app;
+drop policy if exists stego_app_all on public.mfa_recovery_codes;
+create policy stego_app_all on public.mfa_recovery_codes for all to stego_app using (true) with check (true);
 
 revoke all on function public.protect_admin_accounts() from public, anon, authenticated;
 
@@ -136,11 +162,11 @@ create trigger protect_admin_accounts
 commit;
 
 -- -------------------------------------------------------------------------------------
--- 4. Check (read-only). Expected: rls_enabled = true for all 4 tables, and stego_app
+-- 4. Check (read-only). Expected: rls_enabled = true for all 5 tables, and stego_app
 --    privileges exactly as granted above.
 -- -------------------------------------------------------------------------------------
 select c.relname as table_name, c.relrowsecurity as rls_enabled
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
-  and c.relname in ('admin_users', 'refresh_tokens', 'revoked_families', 'audit_log')
+  and c.relname in ('admin_users', 'refresh_tokens', 'revoked_families', 'audit_log', 'mfa_recovery_codes')
 order by 1;

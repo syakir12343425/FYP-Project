@@ -1,4 +1,5 @@
-"""/api/auth/*  — login, refresh (rotating, reuse-detecting), logout, me, change-password."""
+"""/api/auth/*  — login (+ two-step code), refresh (rotating, reuse-detecting), logout, me, change-password,
+two-step verification set-up / turn off / new recovery codes."""
 import uuid
 from datetime import timedelta
 
@@ -6,16 +7,18 @@ import jwt
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 import config
-from db import AdminUser, RefreshToken, RevokedFamily, User, audit, aware, get_db, utcnow
-from security import (DUMMY_HASH, create_access_token, decode_access_token, hash_password,
-                      hash_refresh_token, new_refresh_token, password_problem, verify_password)
+from db import AdminUser, MfaRecoveryCode, RefreshToken, RevokedFamily, User, audit, aware, get_db, utcnow
+from security import (DUMMY_HASH, create_access_token, create_mfa_token, decode_access_token, decode_mfa_token,
+                      decrypt_mfa_secret, encrypt_mfa_secret, hash_password, hash_recovery_code,
+                      hash_refresh_token, new_recovery_codes, new_refresh_token, normalise_recovery_code,
+                      otpauth_uri, password_problem, qr_svg, totp_new_secret, totp_verify, verify_password)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -28,6 +31,24 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class MfaLoginRequest(BaseModel):
+    mfa_token: str = Field(min_length=10, max_length=2048)
+    code: str = Field(min_length=6, max_length=32)
+
+
+class PasswordConfirm(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
+class CodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=32)
+
+
+class PasswordAndCode(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: str = Field(min_length=6, max_length=32)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=1, max_length=128)
@@ -38,7 +59,8 @@ def session_body(user: User) -> dict:
     the server re-checks both from the database on every request."""
     return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
             "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username,
-            "role": user.role, "must_change_password": user.must_change_password}
+            "role": user.role, "must_change_password": user.must_change_password,
+            "mfa_enabled": user.mfa_enabled}
 
 
 def _csrf_guard(request: Request):
@@ -116,10 +138,101 @@ def login(request: Request, body: LoginRequest, response: Response, db: Session 
         audit(db, "login_blocked_disabled", request, user.username)
         raise HTTPException(401, "Invalid credentials or account temporarily locked")
 
+    if user.mfa_enabled:
+        # Password right, second step still to come. No session yet; the failure counter is NOT reset,
+        # so wrong codes keep counting towards the lockout.
+        audit(db, "login_password_ok_mfa_pending", request, user.username)
+        return {"mfa_required": True, "mfa_token": create_mfa_token(user.id)}
+
     user.failed_attempts, user.locked_until, user.last_login_at = 0, None, now
     db.commit()
     _issue_refresh(db, user, str(uuid.uuid4()), response)
     audit(db, "login_success", request, user.username)
+    return session_body(user)
+
+
+def _register_failure(db: Session, request: Request, user: User, event: str):
+    now = utcnow()
+    user.failed_attempts += 1
+    if user.failed_attempts >= config.MAX_FAILED_LOGINS:
+        user.locked_until = now + timedelta(minutes=config.LOCKOUT_MINUTES)
+        user.failed_attempts = 0
+        audit(db, "account_locked", request, user.username)
+    db.commit()
+    audit(db, event, request, user.username)
+
+
+def check_second_factor(db: Session, user: User, code: str) -> str | None:
+    """A current authenticator code or an unused recovery code. Returns 'totp' / 'recovery_code', or None.
+    Both are claimed ATOMICALLY in the database (UPDATE ... WHERE still unused), so two requests racing
+    with the same code cannot both succeed."""
+    if not user.mfa_enabled or not user.mfa_secret_enc:
+        return None
+    step = totp_verify(decrypt_mfa_secret(user.mfa_secret_enc, user.id), code, user.mfa_last_step)
+    if step is not None:
+        claimed = db.execute(update(User).where(User.id == user.id, User.mfa_last_step < step)
+                             .values(mfa_last_step=step)).rowcount
+        db.commit()
+        if claimed == 1:
+            user.mfa_last_step = step
+            return "totp"
+        return None
+    norm = normalise_recovery_code(code)
+    if norm:
+        rec = db.scalar(select(MfaRecoveryCode).where(MfaRecoveryCode.user_id == user.id,
+                                                      MfaRecoveryCode.code_hash == hash_recovery_code(norm),
+                                                      MfaRecoveryCode.used_at.is_(None)))
+        if rec is not None:
+            claimed = db.execute(update(MfaRecoveryCode).where(MfaRecoveryCode.id == rec.id,
+                                                               MfaRecoveryCode.used_at.is_(None))
+                                 .values(used_at=utcnow())).rowcount
+            db.commit()
+            if claimed == 1:
+                return "recovery_code"
+    return None
+
+
+def _replace_recovery_codes(db: Session, user: User) -> list[str]:
+    """Retire every unused code (marked used, never deleted) and store 10 new ones as keyed hashes."""
+    db.execute(update(MfaRecoveryCode).where(MfaRecoveryCode.user_id == user.id, MfaRecoveryCode.used_at.is_(None))
+               .values(used_at=utcnow()))
+    codes = new_recovery_codes()
+    for c in codes:
+        db.add(MfaRecoveryCode(user_id=user.id, code_hash=hash_recovery_code(c)))
+    return codes
+
+
+def retire_mfa(db: Session, user: User):
+    """Turn two-step verification off for this user (their choice, or an admin reset after a lost phone)."""
+    user.mfa_enabled, user.mfa_secret_enc, user.mfa_pending_enc, user.mfa_pending_at = False, None, None, None
+    db.execute(update(MfaRecoveryCode).where(MfaRecoveryCode.user_id == user.id, MfaRecoveryCode.used_at.is_(None))
+               .values(used_at=utcnow()))
+
+
+@router.post("/mfa")
+@limiter.limit("5/minute")
+def login_mfa(request: Request, body: MfaLoginRequest, response: Response, db: Session = Depends(get_db)):
+    """Second step of signing in: the code from the authenticator app (or a recovery code)."""
+    _csrf_guard(request)
+    try:
+        data = decode_mfa_token(body.mfa_token)
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Sign-in took too long. Start again.")
+    user = db.get(User, int(data["sub"]))
+    now = utcnow()
+    if user is None or user.disabled or not user.mfa_enabled:
+        raise HTTPException(401, "Invalid credentials or account temporarily locked")
+    if user.locked_until and aware(user.locked_until) > now:
+        audit(db, "login_blocked_locked", request, user.username)
+        raise HTTPException(401, "Invalid credentials or account temporarily locked")
+    how = check_second_factor(db, user, body.code)
+    if how is None:
+        _register_failure(db, request, user, "mfa_failed")
+        raise HTTPException(401, "Wrong code")
+    user.failed_attempts, user.locked_until, user.last_login_at = 0, None, now
+    db.commit()
+    _issue_refresh(db, user, str(uuid.uuid4()), response)
+    audit(db, "login_success", request, user.username, f"second_factor={how}")
     return session_body(user)
 
 
@@ -207,12 +320,15 @@ def require_user(user: User = Depends(require_session_user)) -> User:
 def require_admin(user: User = Depends(require_user)) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Admins only")
+    if config.REQUIRE_ADMIN_MFA and not user.mfa_enabled:
+        raise HTTPException(403, "Turn on two-step verification (Account page) before managing accounts")
     return user
 
 
 @router.get("/me")
 def me(user: User = Depends(require_session_user)):
-    return {"username": user.username, "role": user.role, "must_change_password": user.must_change_password}
+    return {"username": user.username, "role": user.role, "must_change_password": user.must_change_password,
+            "mfa_enabled": user.mfa_enabled}
 
 
 @router.post("/change-password")
@@ -237,3 +353,87 @@ def change_password(request: Request, body: ChangePasswordRequest, response: Res
     _issue_refresh(db, user, str(uuid.uuid4()), response)  # this device continues with a fresh session
     audit(db, "password_changed", request, user.username)
     return session_body(user)
+
+
+# ------------------------------------------------------------------ two-step verification management
+@router.post("/mfa/setup")
+@limiter.limit("5/minute")
+def mfa_setup(request: Request, body: PasswordConfirm, user: User = Depends(require_user),
+              db: Session = Depends(get_db)):
+    """Start set-up: needs the password again (a stolen, unlocked session alone cannot enrol a device).
+    The new secret is kept as 'pending' until a correct code proves the app was set up."""
+    _csrf_guard(request)
+    if user.mfa_enabled:
+        raise HTTPException(409, "Two-step verification is already on")
+    if not verify_password(body.password, user.password_hash):
+        audit(db, "mfa_setup_bad_password", request, user.username)
+        raise HTTPException(400, "Password is wrong")
+    secret = totp_new_secret()
+    user.mfa_pending_enc, user.mfa_pending_at = encrypt_mfa_secret(secret, user.id), utcnow()
+    db.commit()
+    audit(db, "mfa_setup_started", request, user.username)
+    uri = otpauth_uri(secret, user.username)
+    return {"secret": secret, "otpauth_uri": uri, "qr_svg": qr_svg(uri)}
+
+
+@router.post("/mfa/enable")
+@limiter.limit("5/minute")
+def mfa_enable(request: Request, body: CodeRequest, user: User = Depends(require_user),
+               db: Session = Depends(get_db)):
+    _csrf_guard(request)
+    if user.mfa_enabled:
+        raise HTTPException(409, "Two-step verification is already on")
+    if not user.mfa_pending_enc or not user.mfa_pending_at or aware(user.mfa_pending_at) < utcnow() - timedelta(minutes=10):
+        raise HTTPException(400, "Set-up expired. Start again.")
+    step = totp_verify(decrypt_mfa_secret(user.mfa_pending_enc, user.id), body.code, 0)
+    if step is None:
+        audit(db, "mfa_enable_bad_code", request, user.username)
+        raise HTTPException(400, "Wrong code. Check that your phone's clock is set automatically, then try the newest code.")
+    user.mfa_secret_enc, user.mfa_pending_enc, user.mfa_pending_at = user.mfa_pending_enc, None, None
+    user.mfa_enabled, user.mfa_last_step = True, step
+    codes = _replace_recovery_codes(db, user)
+    db.commit()
+    audit(db, "mfa_enabled", request, user.username)
+    return {"mfa_enabled": True, "recovery_codes": codes}
+
+
+@router.post("/mfa/disable")
+@limiter.limit("5/minute")
+def mfa_disable(request: Request, body: PasswordAndCode, user: User = Depends(require_user),
+                db: Session = Depends(get_db)):
+    _csrf_guard(request)
+    if not user.mfa_enabled:
+        raise HTTPException(409, "Two-step verification is already off")
+    if user.role == "admin" and config.REQUIRE_ADMIN_MFA:
+        raise HTTPException(403, "Admins must keep two-step verification on")
+    if not verify_password(body.password, user.password_hash) or check_second_factor(db, user, body.code) is None:
+        audit(db, "mfa_disable_failed", request, user.username)
+        raise HTTPException(400, "Password or code is wrong")
+    retire_mfa(db, user)
+    db.commit()
+    audit(db, "mfa_disabled", request, user.username)
+    return {"mfa_enabled": False}
+
+
+@router.post("/mfa/recovery-codes")
+@limiter.limit("5/minute")
+def mfa_new_recovery_codes(request: Request, body: PasswordAndCode, user: User = Depends(require_user),
+                           db: Session = Depends(get_db)):
+    _csrf_guard(request)
+    if not user.mfa_enabled:
+        raise HTTPException(409, "Two-step verification is off")
+    if not verify_password(body.password, user.password_hash) or check_second_factor(db, user, body.code) is None:
+        audit(db, "mfa_recovery_codes_failed", request, user.username)
+        raise HTTPException(400, "Password or code is wrong")
+    codes = _replace_recovery_codes(db, user)
+    db.commit()
+    audit(db, "mfa_recovery_codes_replaced", request, user.username)
+    return {"recovery_codes": codes}
+
+
+@router.get("/mfa/status")
+def mfa_status(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    left = db.scalar(select(func.count()).select_from(MfaRecoveryCode)
+                     .where(MfaRecoveryCode.user_id == user.id, MfaRecoveryCode.used_at.is_(None)))
+    return {"mfa_enabled": user.mfa_enabled, "recovery_codes_left": int(left or 0),
+            "required": user.role == "admin" and config.REQUIRE_ADMIN_MFA}

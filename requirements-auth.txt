@@ -4,3 +4,5 @@ bcrypt
 PyJWT
 slowapi
 python-dotenv
+cryptography   # AES-GCM for two-step verification secrets
+segno          # QR code on the two-step set-up screen (optional: without it the secret is shown as text)

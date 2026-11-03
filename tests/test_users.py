@@ -12,6 +12,8 @@ _tmp = Path(tempfile.mkdtemp())
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp / 'users_test.db'}"
 os.environ["JWT_SECRET"] = "test-only-secret-" + "x" * 40
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:8080"
+os.environ["REQUIRE_ADMIN_MFA"] = "false"          # MFA is tested in tests/test_mfa.py
+os.environ["MFA_ENCRYPTION_KEY"] = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU="
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import Depends, FastAPI               # noqa: E402
@@ -150,7 +152,8 @@ def main():
     added = migrate_users_schema(old)
     with old.connect() as conn:
         role = conn.execute(text("SELECT role FROM admin_users WHERE username = 'oldadmin'")).scalar()
-    check("adds the 4 new columns", sorted(added) == sorted(["role", "disabled", "must_change_password", "last_login_at"]), added)
+    check("adds the new account columns", {"role", "disabled", "must_change_password", "last_login_at", "mfa_enabled",
+                                           "mfa_secret_enc", "mfa_last_step"} <= set(added), added)
     check("existing account becomes admin", role == "admin", role)
     check("re-running does nothing", migrate_users_schema(old) == [] and missing_user_columns(old) == [])
 

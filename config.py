@@ -29,3 +29,11 @@ MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
 MIN_PASSWORD_LEN = 12
 BCRYPT_ROUNDS = 12
+
+# Two-step verification (TOTP). The key encrypts every user's authenticator secret in the database
+# (AES-256-GCM), so a database leak alone does not reveal them. 32 random bytes, base64:
+#   python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"
+# Changing or losing it invalidates every enrolled authenticator (users would have to set up again).
+MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY", "")
+REQUIRE_ADMIN_MFA = os.getenv("REQUIRE_ADMIN_MFA", "true").lower() == "true"   # admins must enrol to manage accounts
+MFA_ISSUER = "RobustStego"

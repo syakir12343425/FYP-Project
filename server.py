@@ -98,6 +98,8 @@ async def security_middleware(request: Request, call_next):
     return resp
 
 
+if not config.MFA_ENCRYPTION_KEY:
+    raise RuntimeError("MFA_ENCRYPTION_KEY is missing from .env (needed for two-step verification). See .env.example")
 app.include_router(auth_router)
 app.include_router(admin_router)
 

@@ -115,24 +115,28 @@ let accessToken = null;
 let refreshTimer = null;
 
 // Role and must-change flag only shape the UI; the server re-checks both on every request.
-let session = { username: '', role: 'user', mustChange: false };
+let session = { username: '', role: 'user', mustChange: false, mfaEnabled: false };
 
 function setSession(data) {
   accessToken = data.access_token;
-  session = { username: data.username, role: data.role || 'user', mustChange: Boolean(data.must_change_password) };
+  session = { username: data.username, role: data.role || 'user', mustChange: Boolean(data.must_change_password),
+              mfaEnabled: Boolean(data.mfa_enabled) };
   document.getElementById('current-user').innerText = data.username;
   document.body.dataset.role = session.role;
   document.getElementById('login-overlay').classList.remove('active');
   if (session.mustChange) openPasswordDialog(true);
   else if (session.role !== 'admin' && document.body.dataset.mode === 'users') handleNavigation('page-home');
+  if (document.body.dataset.mode === 'account') loadMfaStatus();
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(silentRefresh, Math.max(10, data.expires_in - 60) * 1000);
 }
 
 function clearSession() {
   accessToken = null;
-  session = { username: '', role: 'user', mustChange: false };
+  session = { username: '', role: 'user', mustChange: false, mfaEnabled: false };
   delete document.body.dataset.role;
+  showPasswordLoginStep();
+  resetMfaPanels();
   closePasswordDialog();
   hideTempPassword();
   clearTimeout(refreshTimer);
@@ -193,6 +197,20 @@ async function errorDetail(res, fallback) {
     if (Array.isArray(body.detail) && body.detail[0] && body.detail[0].msg) return body.detail[0].msg;
   } catch (_) { /* not JSON */ }
   return fallback;
+}
+
+// POST to a session endpoint that needs both the bearer token and the CSRF header.
+async function sessionPost(path, body) {
+  const run = () => fetch(`${API_BASE}${path}`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', 'Authorization': `Bearer ${accessToken}` },
+    body: JSON.stringify(body || {}),
+  });
+  let res = await run();
+  if (res.status === 401 && await silentRefresh()) res = await run();
+  if (res.status === 429) throw new Error('Too many attempts. Wait a minute and try again.');
+  if (!res.ok) throw new Error(await errorDetail(res, `Request failed (${res.status}).`));
+  return res.json();
 }
 
 // ------------------------------------------------------------ change password
@@ -287,6 +305,7 @@ function renderUsers(users) {
     const [label, tone] = userStatus(u);
     const st = cell('');
     const pill = document.createElement('span'); pill.className = `status-pill ${tone}`; pill.textContent = label; st.appendChild(pill);
+    cell(u.mfa_enabled ? 'On' : 'Off', u.mfa_enabled ? 'mfa-on' : 'cell-note');
     cell(fmtDate(u.last_login_at));
     const actions = document.createElement('div'); actions.className = 'user-actions';
     cell('', 'user-actions-cell').appendChild(actions);
@@ -309,6 +328,7 @@ function renderUsers(users) {
         showTempPassword(`New one-time password for ${r.user.username}`, r.temporary_password);
         await loadUsers();
       });
+      if (u.mfa_enabled) add('Reset two-step', async () => { await adminCall(`/api/admin/users/${u.id}/reset-mfa`); await loadUsers(); });
       if (u.disabled) add('Enable', async () => { await adminCall(`/api/admin/users/${u.id}/enable`); await loadUsers(); });
       else add('Disable', async () => { await adminCall(`/api/admin/users/${u.id}/disable`); await loadUsers(); }, 'btn-danger-outline');
     } else if (!u.locked) {
@@ -324,9 +344,13 @@ async function loadUsers() {
   try {
     const data = await adminCall('/api/admin/users', 'GET');
     err.textContent = '';
+    document.getElementById('users-mfa-needed').hidden = true;
     renderUsers(data.users);
   } catch (ex) {
-    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+    const needsMfa = /two-step/i.test(ex.message);
+    document.getElementById('users-mfa-needed').hidden = !needsMfa;
+    err.textContent = needsMfa ? '' : (ex instanceof TypeError ? describeFetchError(ex) : ex.message);
+    if (needsMfa) document.getElementById('users-tbody').replaceChildren();
   }
 }
 
@@ -349,7 +373,138 @@ async function handleCreateUser(e) {
   }
 }
 
+// ------------------------------------------------------------ account page: two-step verification
+let recoveryCodes = [];
+
+function showOnly(id) {
+  ['mfa-off', 'mfa-step-password', 'mfa-step-scan', 'mfa-codes', 'mfa-on'].forEach(x => {
+    document.getElementById(x).hidden = x !== id;
+  });
+}
+
+function resetMfaPanels() {
+  recoveryCodes = [];
+  document.getElementById('mfa-codes-list').replaceChildren();
+  ['mfa-setup-password', 'mfa-enable-code', 'mfa-manage-password', 'mfa-manage-code'].forEach(id => { document.getElementById(id).value = ''; });
+  ['mfa-setup-error', 'mfa-enable-error', 'mfa-manage-error'].forEach(id => { document.getElementById(id).textContent = ''; });
+  document.getElementById('mfa-secret').textContent = '';
+  const qr = document.getElementById('mfa-qr'); qr.hidden = true; qr.removeAttribute('src');
+}
+
+function renderMfaStatus(st) {
+  const pill = document.getElementById('mfa-pill');
+  pill.textContent = st.mfa_enabled ? 'On' : 'Off';
+  pill.className = `status-pill ${st.mfa_enabled ? 'ok' : 'off'}`;
+  document.getElementById('mfa-required-note').hidden = !(st.required && !st.mfa_enabled);
+  document.getElementById('mfa-disable').hidden = Boolean(st.required);
+  if (st.mfa_enabled) {
+    const n = st.recovery_codes_left;
+    document.getElementById('mfa-codes-left').textContent =
+      `${n} recovery code${n === 1 ? '' : 's'} left.` + (n <= 3 ? ' Get new ones soon.' : '');
+    showOnly('mfa-on');
+  } else {
+    showOnly('mfa-off');
+  }
+}
+
+async function loadMfaStatus() {
+  if (!accessToken) return;
+  resetMfaPanels();
+  try {
+    const res = await apiFetch('/api/auth/mfa/status');
+    if (!res.ok) throw new Error(await errorDetail(res, 'Could not load two-step status.'));
+    renderMfaStatus(await res.json());
+  } catch (ex) {
+    showOnly('mfa-off');
+    document.getElementById('mfa-setup-error').textContent = ex.message;
+  }
+}
+
+function showRecoveryCodes(codes) {
+  recoveryCodes = codes;
+  const list = document.getElementById('mfa-codes-list');
+  list.replaceChildren(...codes.map(c => { const li = document.createElement('li'); li.textContent = c; return li; }));
+  showOnly('mfa-codes');
+}
+
+function initMfaPanels() {
+  document.getElementById('mfa-start').addEventListener('click', () => {
+    showOnly('mfa-step-password');
+    document.getElementById('mfa-setup-password').focus();
+  });
+  document.querySelectorAll('.mfa-cancel').forEach(b => b.addEventListener('click', loadMfaStatus));
+
+  document.getElementById('mfa-step-password').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('mfa-setup-error');
+    err.textContent = '';
+    try {
+      const r = await sessionPost('/api/auth/mfa/setup', { password: document.getElementById('mfa-setup-password').value });
+      document.getElementById('mfa-setup-password').value = '';
+      document.getElementById('mfa-secret').textContent = r.secret.match(/.{1,4}/g).join(' ');
+      const qr = document.getElementById('mfa-qr');
+      if (r.qr_svg) { qr.src = 'data:image/svg+xml;base64,' + btoa(r.qr_svg); qr.hidden = false; }  // <img>: an SVG here cannot run scripts
+      else qr.hidden = true;
+      showOnly('mfa-step-scan');
+      document.getElementById('mfa-enable-code').focus();
+    } catch (ex) { err.textContent = ex.message; }
+  });
+
+  document.getElementById('mfa-step-scan').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('mfa-enable-error');
+    err.textContent = '';
+    try {
+      const r = await sessionPost('/api/auth/mfa/enable', { code: document.getElementById('mfa-enable-code').value });
+      session.mfaEnabled = true;
+      document.getElementById('mfa-secret').textContent = '';
+      document.getElementById('mfa-pill').textContent = 'On';
+      document.getElementById('mfa-pill').className = 'status-pill ok';
+      document.getElementById('mfa-required-note').hidden = true;
+      showRecoveryCodes(r.recovery_codes);
+    } catch (ex) { err.textContent = ex.message; }
+  });
+
+  document.getElementById('mfa-manage').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const action = e.submitter ? e.submitter.dataset.mfaAction : 'codes';
+    const err = document.getElementById('mfa-manage-error');
+    err.textContent = '';
+    const body = { password: document.getElementById('mfa-manage-password').value, code: document.getElementById('mfa-manage-code').value };
+    try {
+      if (action === 'disable') {
+        await sessionPost('/api/auth/mfa/disable', body);
+        session.mfaEnabled = false;
+        await loadMfaStatus();
+      } else {
+        const r = await sessionPost('/api/auth/mfa/recovery-codes', body);
+        document.getElementById('mfa-manage-password').value = '';
+        document.getElementById('mfa-manage-code').value = '';
+        showRecoveryCodes(r.recovery_codes);
+      }
+    } catch (ex) { err.textContent = ex.message; }
+  });
+
+  const codesText = () => `RobustStego recovery codes for ${session.username}\nEach code works once.\n\n${recoveryCodes.join('\n')}\n`;
+  document.getElementById('mfa-codes-copy').addEventListener('click', async () => {
+    const b = document.getElementById('mfa-codes-copy');
+    try { await navigator.clipboard.writeText(codesText()); b.textContent = 'Copied'; } catch (_) { b.textContent = 'Select and copy by hand'; }
+    setTimeout(() => { b.textContent = 'Copy'; }, 2000);
+  });
+  document.getElementById('mfa-codes-download').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([codesText()], { type: 'text/plain' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'robuststego-recovery-codes.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  document.getElementById('mfa-codes-done').addEventListener('click', loadMfaStatus);
+}
+
 function initAccounts() {
+  initMfaPanels();
+  document.getElementById('login-mfa-form').addEventListener('submit', handleMfaLogin);
+  document.getElementById('login-mfa-back').addEventListener('click', () => showPasswordLoginStep());
   document.getElementById('password-form').addEventListener('submit', handlePasswordChange);
   document.getElementById('password-cancel').addEventListener('click', closePasswordDialog);
   document.getElementById('password-logout').addEventListener('click', handleLogout);
@@ -381,9 +536,55 @@ async function handleLogin(e) {
     if (res.status === 429) throw new Error("Too many attempts. Wait a minute and try again.");
     if (!res.ok) throw new Error("Invalid credentials, or account temporarily locked.");
     document.getElementById('login-password').value = '';
-    setSession(await res.json());
+    const data = await res.json();
+    if (data.mfa_required) showMfaLoginStep(data.mfa_token);
+    else setSession(data);
   } catch (err) {
     errEl.innerText = err instanceof TypeError ? describeFetchError(err) : err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------ sign-in, second step
+// The mfa token only proves the password was right; it lives in this variable for at most 5 minutes.
+let mfaLoginToken = null;
+
+function showMfaLoginStep(token) {
+  mfaLoginToken = token;
+  document.getElementById('login-form').hidden = true;
+  document.getElementById('login-mfa-form').hidden = false;
+  document.getElementById('login-mfa-error').textContent = '';
+  document.getElementById('login-mfa-code').value = '';
+  document.getElementById('login-mfa-code').focus();
+}
+
+function showPasswordLoginStep(message = '') {
+  mfaLoginToken = null;
+  document.getElementById('login-mfa-form').hidden = true;
+  document.getElementById('login-form').hidden = false;
+  document.getElementById('login-error').textContent = message;
+}
+
+async function handleMfaLogin(e) {
+  e.preventDefault();
+  const err = document.getElementById('login-mfa-error');
+  const btn = document.getElementById('login-mfa-submit');
+  err.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await authPost('/api/auth/mfa', { mfa_token: mfaLoginToken, code: document.getElementById('login-mfa-code').value });
+    if (res.status === 429) throw new Error('Too many attempts. Wait a minute and try again.');
+    if (!res.ok) {
+      const detail = await errorDetail(res, 'Wrong code.');
+      if (/too long/i.test(detail)) { showPasswordLoginStep('Sign-in took too long. Enter your password again.'); return; }
+      throw new Error(detail === 'Wrong code' ? 'Wrong code. Use the newest code from the app, or a recovery code.' : detail);
+    }
+    const data = await res.json();
+    showPasswordLoginStep();
+    setSession(data);
+  } catch (ex) {
+    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
   } finally {
     btn.disabled = false;
   }
@@ -563,13 +764,14 @@ const PAGE_ORDER = ['page-embedding', 'page-result', 'page-downscaling', 'page-e
 
 // Which flow a page belongs to: the Start page, the 4-step Hide flow, or the 1-step Read flow.
 const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 'read'
-  : id === 'page-results' ? 'results' : id === 'page-users' ? 'users' : 'hide');
+  : id === 'page-results' ? 'results' : id === 'page-users' ? 'users' : id === 'page-account' ? 'account' : 'hide');
 
 function handleNavigation(targetId) {
   if (targetId === 'page-users') {
     if (session.role !== 'admin') targetId = 'page-home';
     else loadUsers();
   }
+  if (targetId === 'page-account') loadMfaStatus();
   document.body.dataset.mode = pageMode(targetId);
   const mode = pageMode(targetId);
   // Page heading: hide steps take the step label from the stepper; the other pages have fixed names.
@@ -579,12 +781,14 @@ function handleNavigation(targetId) {
       : mode === 'read' ? 'Read a hidden message'
       : mode === 'results' ? 'Measured results'
       : mode === 'users' ? 'Accounts'
+      : mode === 'account' ? 'Your account'
       : (stepBtn ? stepBtn.textContent : '');
   document.getElementById('topbar-step').textContent =
     mode === 'home' ? 'Start'
       : mode === 'read' ? 'Read a message'
       : mode === 'results' ? 'Results'
       : mode === 'users' ? 'Users'
+      : mode === 'account' ? 'Account'
       : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
   document.querySelectorAll('.site-link').forEach(l => {
     if (l.dataset.modeLink === mode) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');

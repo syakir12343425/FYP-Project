@@ -46,9 +46,25 @@ class User(Base):
     # for choosing a new one (every other endpoint answers 403 until then).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Two-step verification (TOTP). Secrets are AES-GCM encrypted with MFA_ENCRYPTION_KEY (security.py).
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    mfa_secret_enc: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mfa_pending_enc: Mapped[str | None] = mapped_column(String(255), nullable=True)   # during set-up only
+    mfa_pending_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mfa_last_step: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # replay protection
 
 
-AdminUser = User   # old name, kept so existing imports keep working
+AdminUser = User
+
+
+class MfaRecoveryCode(Base):
+    """One-time codes for a lost phone. Stored as keyed hashes; used codes are marked, never deleted."""
+    __tablename__ = "mfa_recovery_codes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id", ondelete="CASCADE"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)   # old name, kept so existing imports keep working
 
 
 class RefreshToken(Base):
@@ -89,6 +105,12 @@ _NEW_USER_COLUMNS = {
     "disabled":             ("BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT false"),
     "must_change_password": ("BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT false"),
     "last_login_at":        ("DATETIME", "TIMESTAMP WITH TIME ZONE"),
+    # two-step verification (Nov 2026)
+    "mfa_enabled":          ("BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT false"),
+    "mfa_secret_enc":       ("VARCHAR(255)", "VARCHAR(255)"),
+    "mfa_pending_enc":      ("VARCHAR(255)", "VARCHAR(255)"),
+    "mfa_pending_at":       ("DATETIME", "TIMESTAMP WITH TIME ZONE"),
+    "mfa_last_step":        ("INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
 }
 
 
@@ -116,14 +138,17 @@ def migrate_users_schema(eng=engine) -> list[str]:
 
 
 def init_db():
+    sqlite = engine.dialect.name == "sqlite"
+    if not sqlite:
+        # Check BEFORE create_all: the server's least-privilege role (stego_app) has no DDL rights, by design,
+        # so a missing table or column must be added by the owner (SQL editor), not here.
+        insp = inspect(engine)
+        if insp.has_table("admin_users") and (missing_user_columns() or not insp.has_table("mfa_recovery_codes")):
+            raise RuntimeError("Database is missing the account columns (multi-user / two-step verification). "
+                               "Run supabase_mfa_v4.sql in the Supabase SQL editor (see SECURITY.md)")
     Base.metadata.create_all(engine)
-    if missing_user_columns():
-        if engine.dialect.name == "sqlite":
-            migrate_users_schema()          # local dev database: just do it
-        else:
-            # The server's least-privilege role (stego_app) has no DDL rights, by design.
-            raise RuntimeError("Database is missing the multi-user columns. Run once with the OWNER "
-                               "DATABASE_URL:  python tools/migrate_users.py  (see SECURITY.md)")
+    if sqlite and missing_user_columns():
+        migrate_users_schema()          # local dev database: just do it
 
 
 def get_db():

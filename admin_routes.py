@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from auth_routes import kill_user_sessions, limiter, require_admin
+from auth_routes import kill_user_sessions, limiter, require_admin, retire_mfa
 from db import User, audit, aware, get_db, utcnow
 from security import hash_password, temporary_password
 
@@ -31,7 +31,7 @@ class CreateUserRequest(BaseModel):
 def _public(u: User) -> dict:
     locked = bool(u.locked_until and aware(u.locked_until) > utcnow())
     return {"id": u.id, "username": u.username, "role": u.role, "disabled": u.disabled, "locked": locked,
-            "must_change_password": u.must_change_password,
+            "must_change_password": u.must_change_password, "mfa_enabled": u.mfa_enabled,
             "created_at": aware(u.created_at).isoformat() if u.created_at else None,
             "last_login_at": aware(u.last_login_at).isoformat() if u.last_login_at else None}
 
@@ -122,4 +122,18 @@ def unlock_user(request: Request, user_id: int, admin: User = Depends(require_ad
     u.failed_attempts, u.locked_until = 0, None
     db.commit()
     audit(db, "user_unlocked", request, admin.username, f"user={u.username}")
+    return {"user": _public(u)}
+
+
+@router.post("/users/{user_id}/reset-mfa")
+@limiter.limit("20/minute")
+def reset_mfa(request: Request, user_id: int, admin: User = Depends(require_admin),
+              db: Session = Depends(get_db)):
+    """Lost phone: turn two-step verification off so the person can sign in with their password and set it
+    up again. Signs them out everywhere. Admins are reset with create_admin.py instead."""
+    u = _normal_user(db, user_id)
+    retire_mfa(db, u)
+    db.commit()
+    kill_user_sessions(db, u.id, "mfa_reset")
+    audit(db, "user_mfa_reset", request, admin.username, f"user={u.username}")
     return {"user": _public(u)}
