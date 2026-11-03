@@ -70,7 +70,8 @@ class CNN:
         from models import Decoder, Encoder
         self.torch = torch
         ck = torch.load(checkpoint, map_location="cpu")
-        self.enc, self.dec = Encoder(message_bits=1024), Decoder(message_bits=1024)
+        luma = ck.get("config", {}).get("model", {}).get("luma_only", False)   # brightness-only model?
+        self.enc, self.dec = Encoder(message_bits=1024, luma_only=luma), Decoder(message_bits=1024)
         self.enc.load_state_dict(ck["encoder"])
         self.dec.load_state_dict(ck["decoder"])
         if residual_scale is not None:   # stego = cover + net(x) * residual_scale, so this scales the change linearly

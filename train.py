@@ -106,6 +106,7 @@ def main():
         message_bits=message_bits,
         base_channels=cfg["model"]["encoder_channels"],
         residual_scale=cfg["model"]["residual_scale"],
+        luma_only=cfg["model"].get("luma_only", False),
     ).to(device)
     decoder = Decoder(
         message_bits=message_bits,
@@ -141,6 +142,7 @@ def main():
 
     lambda_chroma = cfg["loss"].get("lambda_chroma", 0.0)
     min_val_psnr = cfg["train"].get("min_val_psnr")   # if set, only epochs at or above this PSNR can become best.pt
+    print(f"Encoder luma_only={encoder.luma_only}")
     print(f"Loss: perceptual={cfg['loss']['lambda_perceptual']} mse={cfg['loss']['lambda_mse']} "
           f"chroma={lambda_chroma} | best.pt needs val PSNR >= {min_val_psnr if min_val_psnr else 'any'}")
 

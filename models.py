@@ -43,8 +43,12 @@ class Encoder(nn.Module):
         stego:   (B, 3, H, W) in [0, 1]
     """
 
-    def __init__(self, message_bits: int = 1024, base_channels: int = 64, residual_scale: float = 0.03):
+    def __init__(self, message_bits: int = 1024, base_channels: int = 64, residual_scale: float = 0.03,
+                 luma_only: bool = False):
         super().__init__()
+        # luma_only (added 3 Nov 2026): the change is forced to be brightness only (the same amount added to
+        # R, G and B, BT.601 weights), so the message cannot be hidden in colour. Off = the first model.
+        self.luma_only = luma_only
         self.message_bits = message_bits
         self.message_hw = int(message_bits ** 0.5)
         assert self.message_hw ** 2 == message_bits, "message_bits must be a perfect square (e.g. 1024 = 32x32)"
@@ -76,6 +80,9 @@ class Encoder(nn.Module):
         msg_map = self._message_to_map(message, H, W)
         x = torch.cat([cover, msg_map], dim=1)
         delta = self.net(x) * self.residual_scale
+        if self.luma_only:
+            y = 0.299 * delta[:, 0:1] + 0.587 * delta[:, 1:2] + 0.114 * delta[:, 2:3]
+            delta = y.expand_as(cover)
         stego = (cover + delta).clamp(0, 1)
         return stego
 
