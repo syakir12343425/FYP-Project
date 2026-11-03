@@ -5,7 +5,8 @@ compression, which no method here was designed or trained for. For every method 
   1. embeds the same payload the server uses (Reed-Solomon + whitening),
   2. saves the stego image as WebP at the HIGHEST quality that fits in 100 KB (what a careful sender would do),
   3. reloads it and extracts, reporting raw BER and whether the message came back exact.
-It also reports, for reference, lossless WebP (a sticker app that kept every pixel, if it fit) and plain JPEG at
+It also reports WebP at quality 90, the setting WhatsApp Web's sticker maker was measured to use on 3 Nov 2026
+(three real stickers matched Pillow WebP q90 exactly in file size and PSNR; Results log section 9d), and, for reference, lossless WebP (a sticker app that kept every pixel, if it fit) and plain JPEG at
 quality 75 (a rough stand-in for WhatsApp "photo" mode, whose exact settings are not published).
 
 Usage (repo root):
@@ -70,7 +71,8 @@ def main():
     bits = encode_message(MESSAGE)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    stats = {m: {k: [] for k in ("sticker", "lossless", "jpeg75")} for m in meths}
+    cases_order = ("wa_q90", "sticker", "lossless", "jpeg75")
+    stats = {m: {k: [] for k in cases_order} for m in meths}
     quals, sizes = [], []
 
     for name, cover in images:
@@ -81,7 +83,8 @@ def main():
             sizes.append(len(data) if data else None)
             if data:
                 (out_dir / f"{Path(name).stem}_{m}.webp").write_bytes(data)
-            cases = {"sticker": roundtrip(data) if data else None,
+            cases = {"wa_q90": roundtrip(encode(stego, "WEBP", quality=90)),
+                     "sticker": roundtrip(data) if data else None,
                      "lossless": roundtrip(encode(stego, "WEBP", lossless=True)),
                      "jpeg75": roundtrip(encode(stego, "JPEG", quality=75))}
             for case, img in cases.items():
@@ -95,10 +98,12 @@ def main():
     q_ok = [q for q in quals if q]
     print(f"\n{n} images. Sticker = 512x512 WebP <= 100 KB at the highest quality that fits "
           f"(quality used: {min(q_ok)}-{max(q_ok)}, median {int(np.median(q_ok))}).\n")
-    print(f"  {'method':6s} {'sticker BER':>12s} {'exact':>7s}   {'lossless BER':>12s} {'exact':>7s}   {'JPEG75 BER':>11s} {'exact':>7s}")
+    print("WhatsApp q90 = WebP quality 90, the setting measured from real WhatsApp Web stickers.\n")
+    print(f"  {'method':6s} {'WhatsApp q90':>12s} {'exact':>7s}   {'sticker BER':>12s} {'exact':>7s}   "
+          f"{'lossless BER':>12s} {'exact':>7s}   {'JPEG75 BER':>11s} {'exact':>7s}")
     for m in meths:
         cells = []
-        for case in ("sticker", "lossless", "jpeg75"):
+        for case in cases_order:
             r = stats[m][case]
             cells.append(f"{100 * np.mean([b for b, _ in r]):11.2f}% {sum(e for _, e in r):3d}/{len(r):<3d}")
         print(f"  {m:6s} " + "   ".join(cells))
