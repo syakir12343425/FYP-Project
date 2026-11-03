@@ -1232,3 +1232,29 @@ body.hide-academic-figures .fig-num { display: none !important; }
   .modal-body { overflow: visible; padding: 0; }
   .academic-report-document { border: none; padding: 0; }
 }
+
+/* ---------------------------------------------------------------- two flows (3 Nov 2026)
+   body[data-mode] = home | hide | read. Only the chosen flow's sidebar steps are shown. */
+[hidden] { display: none !important; }
+body[data-mode="home"] .mode-hide,
+body[data-mode="home"] .mode-read,
+body[data-mode="read"] .mode-hide,
+body[data-mode="hide"] .mode-read { display: none; }
+
+.choice-desc { color: var(--text-2); font-size: var(--text-sm); line-height: 1.6; flex: 1; }
+
+/* Read mode: the recovered message is the headline, styled like the existing result card. */
+.message-hero .found-message {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.message-hero[data-state="idle"] .found-message { color: var(--text-3); font-weight: 400; font-family: inherit; font-size: var(--text-sm); }
+.message-hero[data-state="fail"] .found-message { color: var(--danger); font-family: inherit; }
+
+.tech-details summary { cursor: pointer; font-weight: 600; color: var(--text-2); font-size: var(--text-sm); }
+.tech-details[open] summary { margin-bottom: var(--space-4); }
+.tech-details-body { display: flex; flex-direction: column; gap: var(--space-4); }

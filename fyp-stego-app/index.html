@@ -6,7 +6,7 @@
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-theme hide-academic-figures">
+<body class="dark-theme hide-academic-figures" data-mode="home">
 
   <!-- LOGIN GATE: nothing in the app works without a valid session -->
   <div class="login-overlay active" id="login-overlay">
@@ -44,10 +44,20 @@
       </div>
 
       <nav class="sidebar-nav" aria-label="Workflow steps">
-        <p class="nav-heading">Workflow</p>
+        <!-- Two flows (3 Nov 2026): Hide a message (4 steps) or Read a hidden message (1 step).
+             body[data-mode] shows only the steps of the chosen flow; Start always returns to the choice. -->
         <ol class="step-list">
           <li>
-            <button class="nav-btn active" data-target="page-embedding" aria-current="step">
+            <button class="nav-btn active" data-target="page-home" aria-current="step">
+              <span class="step-num" aria-hidden="true"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>
+              <span class="step-text"><span class="step-label">Start</span><span class="step-caption">Choose what to do</span></span>
+            </button>
+          </li>
+        </ol>
+        <p class="nav-heading mode-hide">Hide a message</p>
+        <ol class="step-list mode-hide">
+          <li>
+            <button class="nav-btn" data-target="page-embedding">
               <span class="step-num" aria-hidden="true"><span class="step-digit">1</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Embed message</span><span class="step-caption">Cover, message, method</span></span>
             </button>
@@ -68,6 +78,15 @@
             <button class="nav-btn" data-target="page-extraction">
               <span class="step-num" aria-hidden="true"><span class="step-digit">4</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
               <span class="step-text"><span class="step-label">Extract &amp; evaluate</span><span class="step-caption">Recover and measure BER</span></span>
+            </button>
+          </li>
+        </ol>
+        <p class="nav-heading mode-read">Read a message</p>
+        <ol class="step-list mode-read">
+          <li>
+            <button class="nav-btn" data-target="page-read">
+              <span class="step-num" aria-hidden="true"><span class="step-digit">1</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
+              <span class="step-text"><span class="step-label">Read hidden message</span><span class="step-caption">Upload an image, see the message</span></span>
             </button>
           </li>
         </ol>
@@ -111,11 +130,11 @@
       <!-- TOP BAR: where you are + facts the app knows (no decorative status) -->
       <header class="topbar">
         <div class="topbar-title">
-          <span class="topbar-step" id="topbar-step">Step 1 of 4</span>
-          <h1 id="topbar-heading">Embed message</h1>
+          <span class="topbar-step" id="topbar-step">Start</span>
+          <h1 id="topbar-heading">What do you want to do?</h1>
         </div>
         <div class="topbar-meta">
-          <span class="chip" title="Steganography method used for embedding">Method: <strong id="topbar-method">CNN</strong></span>
+          <span class="chip mode-hide" title="Steganography method used for embedding">Method: <strong id="topbar-method">CNN</strong></span>
         </div>
       </header>
 
@@ -123,7 +142,119 @@
       <div class="viewports-container">
 
         <!-- ================= PAGE 1: HOME / EMBEDDING MODULE ================= -->
-        <section id="page-embedding" class="viewport active">
+        <!-- ================= START: choose a flow ================= -->
+        <section id="page-home" class="viewport active">
+          <div class="panel-layout grid-2-columns">
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <h3>Hide a message</h3>
+              </div>
+              <div class="card-body">
+                <p class="choice-desc">Hide a short text message (up to 63 bytes) inside a 512&times;512 image, then download the image to send it. You can also test whether the message survives resizing.</p>
+                <button type="button" class="btn btn-primary w-full" data-goto="page-embedding"><span>Hide a message</span></button>
+              </div>
+            </div>
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                </div>
+                <h3>Read a hidden message</h3>
+              </div>
+              <div class="card-body">
+                <p class="choice-desc">You received an image (for example a WhatsApp sticker or photo). Upload it and the app tries every decoder to find the hidden message. You do not need to know which method the sender used.</p>
+                <button type="button" class="btn btn-primary w-full" data-goto="page-read"><span>Read a hidden message</span></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= READ: upload -> message ================= -->
+        <section id="page-read" class="viewport">
+          <div class="panel-layout grid-2-columns">
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                </div>
+                <h3>Read a hidden message</h3>
+              </div>
+              <div class="card-body">
+                <div class="stego-input-status">
+                  <div class="mini-preview-wrap">
+                    <canvas id="read-mini-canvas" width="64" height="64" aria-hidden="true"></canvas>
+                    <span id="read-import-status">No image yet. Upload the image you received (PNG, JPEG or WebP).</span>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-read-upload">Upload image</button>
+                  <input type="file" id="read-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+                </div>
+
+                <div class="form-actions-bar">
+                  <button type="button" id="btn-read-extract" class="btn btn-primary w-full" disabled>
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                    <span>Read hidden message</span>
+                  </button>
+                </div>
+
+                <!-- The answer comes first. Built with textContent only: recovered text is untrusted. -->
+                <div class="ber-hero message-hero" id="read-hero" data-state="idle" aria-live="polite">
+                  <div class="ber-hero-main">
+                    <span class="m-label" id="read-hero-label">Hidden message</span>
+                    <span class="found-message" id="read-message">Upload an image and press Read.</span>
+                    <span class="ber-bits" id="read-hero-note"></span>
+                  </div>
+                  <div class="ber-hero-side">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-read-copy" hidden>Copy message</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+                </div>
+                <h3>Technical details</h3>
+              </div>
+              <div class="card-body">
+                <details class="tech-details" id="read-details">
+                  <summary>Decoder, error correction and bit error rate</summary>
+                  <div class="tech-details-body">
+                    <div class="form-section">
+                      <label class="section-label" for="read-method">Decoder</label>
+                      <select id="read-method" class="form-control">
+                        <option value="auto" selected>Automatic (try all four)</option>
+                        <option value="cnn">CNN Decoder (Robust)</option>
+                        <option value="dct">DCT Extraction (Classical)</option>
+                        <option value="dwt">DWT Extraction (Classical)</option>
+                        <option value="lsb">LSB Extraction (Standard)</option>
+                      </select>
+                    </div>
+                    <div class="table-scroll">
+                      <table class="academic-table" aria-label="Result of each decoder">
+                        <thead><tr><th>Decoder</th><th>Result</th><th>Error correction</th></tr></thead>
+                        <tbody id="read-attempts"><tr><td colspan="3" class="cell-note">No decoding yet.</td></tr></tbody>
+                      </table>
+                    </div>
+                    <p class="residual-desc">Each message carries Reed&ndash;Solomon error correction. A decoder either repairs the message completely or reports failure, and in testing no wrong decoder ever produced a valid message, so the automatic choice is reliable.</p>
+                    <div class="form-section">
+                      <label class="section-label" for="read-expected">Check against the original message <span class="label-hint">(optional, only if you know it)</span></label>
+                      <textarea id="read-expected" class="form-control" maxlength="63" rows="2" placeholder="Type the original message to measure the bit error rate"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-read-check" disabled>Measure bit error rate</button>
+                    <p class="residual-desc" id="read-ber-result" aria-live="polite"></p>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-embedding" class="viewport">
           <div class="panel-layout grid-2-columns">
             
             <!-- Left: Configurations and Inputs -->

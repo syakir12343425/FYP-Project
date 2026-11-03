@@ -496,16 +496,24 @@ function applyTheme(theme) {
 // SPA Routing
 const PAGE_ORDER = ['page-embedding', 'page-result', 'page-downscaling', 'page-extraction'];
 
+// Which flow a page belongs to: the Start page, the 4-step Hide flow, or the 1-step Read flow.
+const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 'read' : 'hide');
+
 function handleNavigation(targetId) {
+  document.body.dataset.mode = pageMode(targetId);
   elements.navButtons.forEach(btn => {
     if (btn.getAttribute('data-target') === targetId) {
       btn.classList.add('active');
       btn.setAttribute('aria-current', 'step');
       // Top bar mirrors the active step (label text comes from the nav itself).
       const label = btn.querySelector('.step-label');
-      document.getElementById('topbar-heading').textContent = label ? label.textContent : '';
+      const mode = pageMode(targetId);
+      document.getElementById('topbar-heading').textContent =
+        mode === 'home' ? 'What do you want to do?' : (label ? label.textContent : '');
       document.getElementById('topbar-step').textContent =
-        `Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
+        mode === 'home' ? 'Start'
+          : mode === 'read' ? 'Read a message'
+          : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
     } else {
       btn.classList.remove('active');
       btn.removeAttribute('aria-current');
@@ -530,6 +538,7 @@ function updateStepProgress() {
     'page-result': state.embedded,
     'page-downscaling': state.attackSimulated,
     'page-extraction': state.extracted,
+    'page-read': readState.result !== null,
   };
   elements.navButtons.forEach(btn => {
     btn.classList.toggle('done', Boolean(done[btn.getAttribute('data-target')]));
@@ -884,6 +893,162 @@ async function runExtractionAndEvaluation() {
   }
 }
 
+// ------------------------------------------------------------------ Read flow (3 Nov 2026)
+// A receiver does not know the original message or which method the sender used, so this flow tries
+// the decoders and shows the MESSAGE first. Reed-Solomon makes this safe: a decoder either repairs the
+// payload completely (ecc_ok) or reports failure, and in testing (tools/cross_matrix.py) no wrong decoder
+// ever produced a valid message. BER is optional, under Technical details, for when the original is known.
+const DECODER_ORDER = ['cnn', 'dct', 'dwt', 'lsb'];
+const readState = { imgData: null, result: null, method: null };
+
+async function extractOnce(image, method, original = '') {
+  const res = await apiFetch("/api/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image, method, original_message: original, cover_image: "" }),
+  });
+  if (!res.ok) throw await responseError(res);
+  return res.json();
+}
+
+function setReadHero(stateName, label, message, note) {
+  const hero = document.getElementById('read-hero');
+  hero.dataset.state = stateName;
+  document.getElementById('read-hero-label').textContent = label;
+  document.getElementById('read-message').textContent = message;
+  document.getElementById('read-hero-note').textContent = note;
+  document.getElementById('btn-read-copy').hidden = stateName !== 'pass';
+}
+
+function renderReadAttempts(results) {
+  const body = document.getElementById('read-attempts');
+  body.replaceChildren(...results.map(r => {
+    const tr = document.createElement('tr');
+    const cells = [
+      methodInfo(r.method).long,
+      r.ecc_ok ? 'Message found' : 'No valid message',
+      r.ecc_ok ? `repaired ${r.ecc_corrected_bytes} of 128 bytes` : 'failed (more than 32 of 128 bytes damaged)',
+    ];
+    cells.forEach((text, i) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (i === 1) td.className = r.ecc_ok ? 'better-val' : 'worse-val';
+      tr.appendChild(td);
+    });
+    return tr;
+  }));
+}
+
+async function runReadExtraction() {
+  if (!readState.imgData) return;
+  const choice = document.getElementById('read-method').value;
+  const methods = choice === 'auto' ? DECODER_ORDER : [choice];
+  const btn = document.getElementById('btn-read-extract');
+  btn.disabled = true;
+  setBtnLabel(btn, choice === 'auto' ? 'Trying all decoders…' : 'Decoding…');
+  document.getElementById('read-ber-result').textContent = '';
+  try {
+    const results = await Promise.all(methods.map(async m => ({ method: m, ...(await extractOnce(readState.imgData, m)) })));
+    renderReadAttempts(results);
+    const ok = results.filter(r => r.ecc_ok).sort((a, b) => a.ecc_corrected_bytes - b.ecc_corrected_bytes);
+    const texts = [...new Set(ok.map(r => r.recovered_message))];
+    if (ok.length === 0) {
+      readState.result = { found: false };
+      readState.method = choice === 'auto' ? null : choice;
+      setReadHero('fail', 'Result', 'No readable hidden message',
+        choice === 'auto'
+          ? 'None of the four decoders could read a message. Either this image has no hidden message, ' +
+            'or it was changed too much (more than 32 of 128 bytes damaged) to repair.'
+          : `The ${methodInfo(choice).short} decoder could not read a message. ` +
+            'Try Automatic under Technical details: the sender may have used a different method.');
+      writeLog(`[INFO] Read: no valid message (${methods.join(', ')} tried).`, 'info');
+    } else {
+      const best = ok[0];
+      readState.result = { found: true, text: best.recovered_message };
+      readState.method = best.method;
+      const names = ok.map(r => methodInfo(r.method).short).join(' and ');
+      const repaired = best.ecc_corrected_bytes === 0
+        ? 'no errors to repair'
+        : `error correction repaired ${best.ecc_corrected_bytes} of 128 bytes`;
+      const warn = texts.length > 1
+        ? ' Warning: decoders returned different messages; showing the one that needed the least repair.' : '';
+      setReadHero('pass', 'Hidden message found', best.recovered_message,
+        `Read with the ${names} decoder${ok.length > 1 ? 's' : ''} \u00b7 ${repaired}.${warn}`);
+      writeLog(`[SUCCESS] Read: message found with ${names} (${best.ecc_corrected_bytes} bytes repaired).`, 'success');
+    }
+    document.getElementById('btn-read-check').disabled = !readState.method;
+    updateStepProgress();
+  } catch (err) {
+    const msg = describeFetchError(err);
+    setReadHero('fail', 'Could not decode', msg, '');
+    writeLog(`[ERROR] Read failed: ${msg}`, 'error');
+  } finally {
+    btn.disabled = false;
+    setBtnLabel(btn, 'Read hidden message');
+  }
+}
+
+// Optional: the user knows the original message and wants the raw bit error rate.
+async function runReadBerCheck() {
+  const out = document.getElementById('read-ber-result');
+  const original = document.getElementById('read-expected').value.replace(/\r\n/g, '\n');
+  if (!readState.method) { out.textContent = 'Read the image first, or choose a decoder above.'; return; }
+  if (!original) { out.textContent = 'Type the original message first.'; return; }
+  if (utf8Bytes(original) > MAX_MESSAGE_BYTES) { out.textContent = `The original message is longer than ${MAX_MESSAGE_BYTES} bytes.`; return; }
+  try {
+    const r = await extractOnce(readState.imgData, readState.method, original);
+    const wrong = Math.round(r.ber * 1024);
+    out.textContent = `Bit error rate ${(r.ber * 100).toFixed(2)}% (${wrong} of 1024 bits wrong) with the ` +
+      `${methodInfo(readState.method).short} decoder. ` +
+      (r.ecc_ok && r.recovered_message === original
+        ? 'The recovered message matches the original exactly.'
+        : 'The recovered message does not match the original.');
+  } catch (err) {
+    out.textContent = describeFetchError(err);
+  }
+}
+
+function initReadFlow() {
+  const input = document.getElementById('read-file-input');
+  document.getElementById('btn-read-upload').addEventListener('click', () => input.click());
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    try {
+      const { dataUrl, w, h } = await readImageFile(file);
+      readState.imgData = dataUrl;
+      readState.result = null;
+      readState.method = null;
+      const img = new Image();
+      img.onload = () => drawMini(document.getElementById('read-mini-canvas'), img);
+      img.src = dataUrl;
+      document.getElementById('read-import-status').textContent = `Image loaded (${w}x${h}px). Ready.`;
+      document.getElementById('btn-read-extract').disabled = false;
+      document.getElementById('btn-read-check').disabled = true;
+      document.getElementById('read-ber-result').textContent = '';
+      setReadHero('idle', 'Hidden message', 'Press Read hidden message.', '');
+      updateStepProgress();
+      writeLog(`[INFO] Read: image uploaded (${w}x${h}px).`, 'info');
+    } catch (err) { alert(err.message); }
+  });
+  document.getElementById('btn-read-extract').addEventListener('click', runReadExtraction);
+  document.getElementById('btn-read-check').addEventListener('click', runReadBerCheck);
+  document.getElementById('btn-read-copy').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-read-copy');
+    try {
+      await navigator.clipboard.writeText(readState.result && readState.result.text ? readState.result.text : '');
+      btn.textContent = 'Copied';
+    } catch (_) {
+      // Clipboard blocked: select the text so the user can copy it by hand.
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById('read-message'));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      btn.textContent = 'Selected - press Ctrl+C';
+    }
+    setTimeout(() => { btn.textContent = 'Copy message'; }, 2000);
+  });
+}
+
 // Comparison table. Before an extraction it shows the two benchmark rows; afterwards the first row
 // is this run (server numbers) and the second is the OTHER method's benchmark average (REFERENCE).
 function updateBenchmarkTable() {
@@ -1131,6 +1296,7 @@ function updateAcademicSummaryParagraph() {
 
 // Initialize Application Events
 function initApp() {
+  initReadFlow();
 
   elements.navButtons.forEach(btn => {
     btn.addEventListener('click', () => {
