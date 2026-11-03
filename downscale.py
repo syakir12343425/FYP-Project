@@ -50,6 +50,39 @@ def quantize_ste(x: torch.Tensor) -> torch.Tensor:
     return x_clamped + (quantized - x_clamped).detach()
 
 
+def _codec_roundtrip_uint8(img_hwc_uint8, fmt: str, quality: int):
+    """Real encode/decode with Pillow (no autograd). JPEG uses 4:2:0 chroma subsampling, like
+    messaging apps; WebP lossy is 4:2:0 by design. Returns the decoded HxWx3 uint8 array."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+    buf = io.BytesIO()
+    if fmt == "jpeg":
+        Image.fromarray(img_hwc_uint8).save(buf, "JPEG", quality=int(quality), subsampling="4:2:0")
+    elif fmt == "webp":
+        Image.fromarray(img_hwc_uint8).save(buf, "WEBP", quality=int(quality))
+    else:
+        raise ValueError(fmt)
+    return np.array(Image.open(io.BytesIO(buf.getvalue())).convert("RGB"))
+
+
+def codec_ste(x: torch.Tensor, fmt: str, quality: int) -> torch.Tensor:
+    """
+    Straight-through JPEG/WebP (added 3 Nov 2026 for the WhatsApp experiment). Forward = a REAL
+    Pillow encode/decode of each image at the given quality, so the decoder sees true codec
+    artefacts (8x8 DCT quantisation, reduced colour resolution). Backward = identity, the same
+    trick as quantize_ste, so the encoder still gets a gradient.
+    """
+    import numpy as np
+    xc = x.float().clamp(0, 1)
+    with torch.no_grad():
+        arr = (xc.detach().permute(0, 2, 3, 1).cpu().numpy() * 255.0).round().astype(np.uint8)
+        out = np.stack([_codec_roundtrip_uint8(a, fmt, quality) for a in arr])
+        y = torch.from_numpy(out).to(xc.device).permute(0, 3, 1, 2).float() / 255.0
+    return xc + (y - xc).detach()
+
+
 def lanczos_kernel(x: torch.Tensor, a: int = 3) -> torch.Tensor:
     pi = torch.pi
     x = x.clone()
@@ -102,6 +135,29 @@ class DifferentiableDownscale(nn.Module):
         size = random.choice(sizes)
         mode = random.choice(modes)
         return self.forward(x, size, mode), size, mode
+
+    def channel_forward(self, x: torch.Tensor, attacks: list, jpeg_quality: list, webp_quality: list):
+        """
+        Messaging-app attacks at FULL size (no resize), added 3 Nov 2026: the first models were only
+        ever trained on 224-384 px resizes, so a 512 px sticker or photo was an untrained case.
+          none -> 8-bit save/load only (a lossless sticker or document)
+          jpeg -> real JPEG at a random quality in jpeg_quality [lo, hi] (WhatsApp photo mode)
+          webp -> real lossy WebP at a random quality in webp_quality [lo, hi] (WhatsApp sticker)
+        Returns (image, size, label) like random_forward.
+        """
+        attack = random.choice(attacks)
+        out = quantize_ste(x) if self.quantize else x.clamp(0, 1)
+        if attack == "jpeg":
+            q = random.randint(*jpeg_quality)
+            out = codec_ste(out, "jpeg", q)
+            return out, x.shape[-1], f"jpeg{q}"
+        if attack == "webp":
+            q = random.randint(*webp_quality)
+            out = codec_ste(out, "webp", q)
+            return out, x.shape[-1], f"webp{q}"
+        if attack != "none":
+            raise ValueError(attack)
+        return out, x.shape[-1], "none"
 
 
 def cv2_downscale_numpy(img_uint8, size: int, algorithm: str):

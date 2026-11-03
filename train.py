@@ -8,6 +8,7 @@ Resume:
     python train.py --config configs/config.yaml --resume checkpoints/last.pt
 """
 import argparse
+import random
 import time
 from pathlib import Path
 
@@ -32,14 +33,16 @@ def bit_error_rate(message: torch.Tensor, recovered_probs: torch.Tensor) -> floa
     return (pred_bits != message).float().mean().item()
 
 
-def evaluate_quick(encoder, decoder, downscaler, loader, device, cfg, n_batches=10):
+def evaluate_quick(encoder, decoder, downscaler, loader, device, cfg, n_batches=10, jpeg_quality=None):
     """Fast validation pass: fixed set of (size, mode) sampled once per batch,
     averaged BER/PSNR over a few batches. Full eval.py does the complete
     5-algorithm x 4-size matrix — this is just for picking the best checkpoint
-    during training."""
+    during training. If jpeg_quality is given, also measures BER after a real JPEG at that quality
+    at full size (no resize) on the same stego images, for the messaging-app experiment."""
+    from downscale import codec_ste
     encoder.eval()
     decoder.eval()
-    total_ber, total_psnr, n = 0.0, 0.0, 0
+    total_ber, total_psnr, total_jpeg, n = 0.0, 0.0, 0.0, 0
     with torch.no_grad():
         for i, (cover, message) in enumerate(loader):
             if i >= n_batches:
@@ -51,6 +54,8 @@ def evaluate_quick(encoder, decoder, downscaler, loader, device, cfg, n_batches=
             )
             recovered = decoder(downscaled)
             total_ber += bit_error_rate(message, recovered)
+            if jpeg_quality is not None:
+                total_jpeg += bit_error_rate(message, decoder(codec_ste(stego, "jpeg", jpeg_quality)))
 
             mse = torch.nn.functional.mse_loss(cover, stego).item()
             psnr = 10 * torch.log10(torch.tensor(1.0 / max(mse, 1e-10))).item()
@@ -58,7 +63,8 @@ def evaluate_quick(encoder, decoder, downscaler, loader, device, cfg, n_batches=
             n += 1
     encoder.train()
     decoder.train()
-    return total_ber / max(n, 1), total_psnr / max(n, 1)
+    jpeg_ber = total_jpeg / max(n, 1) if jpeg_quality is not None else None
+    return total_ber / max(n, 1), total_psnr / max(n, 1), jpeg_ber
 
 
 def main():
@@ -143,6 +149,10 @@ def main():
     lambda_chroma = cfg["loss"].get("lambda_chroma", 0.0)
     min_val_psnr = cfg["train"].get("min_val_psnr")   # if set, only epochs at or above this PSNR can become best.pt
     print(f"Encoder luma_only={encoder.luma_only}")
+    channel_prob = cfg["downscale"].get("channel_prob", 0.0)   # share of batches given a messaging-app attack
+    if channel_prob > 0:
+        print(f"Channel attacks on {channel_prob:.0%} of batches: {cfg['downscale']['channel_attacks']} "
+              f"(JPEG q {cfg['downscale']['jpeg_quality']}, WebP q {cfg['downscale']['webp_quality']})")
     print(f"Loss: perceptual={cfg['loss']['lambda_perceptual']} mse={cfg['loss']['lambda_mse']} "
           f"chroma={lambda_chroma} | best.pt needs val PSNR >= {min_val_psnr if min_val_psnr else 'any'}")
 
@@ -157,9 +167,15 @@ def main():
 
             with torch.autocast(device_type=device.type, enabled=cfg["train"]["amp"] and device.type == "cuda"):
                 stego = encoder(cover, message)
-                downscaled, size, mode = downscaler.random_forward(
-                    stego, cfg["downscale"]["train_sizes"], cfg["downscale"]["train_modes"]
-                )
+                if channel_prob > 0 and random.random() < channel_prob:
+                    downscaled, size, mode = downscaler.channel_forward(
+                        stego, cfg["downscale"]["channel_attacks"],
+                        cfg["downscale"]["jpeg_quality"], cfg["downscale"]["webp_quality"],
+                    )
+                else:
+                    downscaled, size, mode = downscaler.random_forward(
+                        stego, cfg["downscale"]["train_sizes"], cfg["downscale"]["train_modes"]
+                    )
                 recovered = decoder(downscaled)
 
             # Loss is computed OUTSIDE autocast, in float32: BCE-after-sigmoid is unsafe under
@@ -182,9 +198,17 @@ def main():
             if step % cfg["train"]["log_every"] == 0:
                 pbar.set_postfix({k: f"{v/(step+1):.4f}" for k, v in running.items()})
 
-        val_ber, val_psnr = evaluate_quick(encoder, decoder, downscaler, val_loader, device, cfg)
+        val_ber_resize, val_psnr, val_ber_jpeg = evaluate_quick(
+            encoder, decoder, downscaler, val_loader, device, cfg,
+            jpeg_quality=75 if channel_prob > 0 else None)
         dt = time.time() - t0
-        print(f"Epoch {epoch+1}: val BER={val_ber:.4f} val PSNR={val_psnr:.2f}dB ({dt:.0f}s)")
+        if val_ber_jpeg is None:
+            val_ber = val_ber_resize
+            print(f"Epoch {epoch+1}: val BER={val_ber:.4f} val PSNR={val_psnr:.2f}dB ({dt:.0f}s)")
+        else:   # select best.pt on resize AND messaging-app robustness together
+            val_ber = (val_ber_resize + val_ber_jpeg) / 2
+            print(f"Epoch {epoch+1}: val BER resize={val_ber_resize:.4f} JPEG75@512={val_ber_jpeg:.4f} "
+                  f"(mean {val_ber:.4f}) val PSNR={val_psnr:.2f}dB ({dt:.0f}s)")
 
         ckpt = {
             "encoder": encoder.state_dict(),
@@ -206,8 +230,10 @@ def main():
             print(f"  -> new best (BER={best_ber:.4f}), saved {ckpt_dir / 'best.pt'}")
         else:
             if not eligible:
-                print(f"  (not eligible for best.pt: val PSNR {val_psnr:.2f} < {min_val_psnr})")
-            patience_counter += 1
+                print(f"  (not eligible for best.pt: val PSNR {val_psnr:.2f} < {min_val_psnr}; "
+                      f"not counted towards early stopping)")
+            else:
+                patience_counter += 1
             if patience_counter >= cfg["train"]["early_stop_patience"]:
                 print(f"Early stopping: no improvement for {patience_counter} epochs.")
                 break
