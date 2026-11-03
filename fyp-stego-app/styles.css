@@ -58,7 +58,7 @@ body.dark-theme {
   --text-on-accent: #ffffff;
 
   --accent: #2f6fe8;
-  --accent-hover: #4a82ee;
+  --accent-hover: #255fd0;   /* was #4a82ee: white text on it was 3.67:1; now 5.79:1 */
   --accent-text: #86aefc;
   --accent-soft: rgba(47, 111, 232, 0.16);
 
@@ -108,7 +108,7 @@ body.light-theme {
 
   --cnn: var(--accent-text);
   --lsb: #5f6776;   /* was #6b7383 (4.36:1 on --surface-2); now >= 4.5:1 */
-  --dct: #b45309;   /* 4.6:1 */
+  --dct: #a3480a;   /* 6.0:1 on white, 5.2:1 on the highlighted table row (was #b45309, 4.36:1) */
   --dwt: #6d3fd1;   /* 5.9:1 */
 
   --canvas-bg: #e9edf2;
@@ -198,7 +198,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .logo-icon svg { width: 18px; height: 18px; }
 
-.sidebar-title h2 { font-size: var(--text-md); font-weight: 700; letter-spacing: -0.01em; }
+.sidebar-title .brand-name { font-size: var(--text-md); font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
 .sidebar-title span { display: block; font-size: var(--text-xs); color: var(--text-3); }
 
 .sidebar-nav { padding: var(--space-5) var(--space-3); }
@@ -951,7 +951,7 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .ber-hero[data-state="fail"] .ber-verdict { color: var(--danger); }
 .ber-hero[data-state="idle"] .ber-verdict,
 .ber-hero[data-state="na"] .ber-verdict { color: var(--text-2); font-weight: 500; }
-.ber-target { font-size: var(--text-xs); color: var(--text-3); }
+.ber-target { font-size: var(--text-xs); color: var(--text-2); }   /* text-3 was 4.44:1 on the green card */
 .ber-hero .m-indicator { display: none; }  /* state is shown by the card itself */
 
 .grid-2-small { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
@@ -1318,3 +1318,13 @@ body[data-mode="results"] .mode-read { display: none; }
 .svg-chart-wrapper { border: none; padding: 0; background: transparent; }
 .ber-hero[data-state="idle"],
 .ber-hero[data-state="na"] { border-color: transparent; }
+
+/* UX audit fixes (3 Nov 2026, checked against the ui-ux-pro-max rule set) ----------------- */
+.inline-error { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--danger); line-height: 1.5; }
+.inline-error[hidden] { display: none; }
+.form-actions-bar + .inline-error, .card-footer-actions + .inline-error { text-align: right; }
+.tech-details summary { padding: var(--space-1) 0; }            /* target >= 24 px tall (was 21 px) */
+.skip-link { position: absolute; left: -9999px; top: var(--space-3); z-index: 1000; padding: var(--space-2) var(--space-3);
+  background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: var(--radius-md); }
+.skip-link:focus { left: var(--space-3); }
+#topbar-heading:focus, #main-content:focus { outline: none; }  /* focused by script on page change, not by the user */

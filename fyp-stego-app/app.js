@@ -401,6 +401,9 @@ function handleNavigation(targetId) {
       vp.classList.remove('active');
     }
   });
+  // Move focus to the new page heading so keyboard and screen-reader users land on the new content.
+  const heading = document.getElementById('topbar-heading');
+  if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: true }); }
 }
 
 // Tick completed workflow steps in the sidebar. Purely visual: derived from existing state,
@@ -537,14 +540,45 @@ function drawMini(canvas, source) {
   ctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, 64, 64);
 }
 
+// Inline error messages (UX audit, 3 Nov 2026): errors appear next to the field or button they concern,
+// are announced to screen readers (role="alert"), and never block the page like alert() did.
+// textContent only: messages can include server text.
+function showInlineError(anchor, msg, where = 'after') {
+  if (!anchor) return;
+  const sib = where === 'after' ? anchor.nextElementSibling : anchor.previousElementSibling;
+  let el = sib && sib.classList.contains('inline-error') ? sib : null;
+  if (!el) {
+    el = document.createElement('p');
+    el.className = 'inline-error';
+    el.setAttribute('role', 'alert');
+    if (where === 'after') anchor.after(el); else anchor.before(el);
+  }
+  el.textContent = msg;
+  el.hidden = false;
+}
+function clearInlineError(anchor) {
+  if (!anchor) return;
+  for (const sib of [anchor.nextElementSibling, anchor.previousElementSibling]) {
+    if (sib && sib.classList.contains('inline-error')) sib.hidden = true;
+  }
+}
+const embedFooter = () => document.querySelector('#page-embedding .card-footer-actions');
+const stegoSourceBox = () => document.querySelector('#page-downscaling .stego-input-status');
+const attackedSourceBox = () => document.querySelector('#page-extraction .stego-input-status');
+const messageBox = () => document.querySelector('.message-input-wrapper');
+
 // Page 1 -> 2: calls POST /api/embed on the real trained CNN (or real LSB).
 async function runStegoPipeline() {
+  clearInlineError(messageBox());
+  clearInlineError(embedFooter());
   if (state.message.trim() === '') {
-    alert("Please enter a secret message payload before embedding.");
+    showInlineError(messageBox(), "Type a secret message before embedding.");
+    elements.secretMessageInput.focus();
     return;
   }
   if (utf8Bytes(state.message) > MAX_MESSAGE_BYTES) {
-    alert(`The message is ${utf8Bytes(state.message)} bytes; the limit is ${MAX_MESSAGE_BYTES} bytes (emoji and accented letters use more than 1 byte).`);
+    showInlineError(messageBox(), `The message is ${utf8Bytes(state.message)} bytes; the limit is ${MAX_MESSAGE_BYTES} bytes (emoji and accented letters use more than 1 byte). Shorten it and try again.`);
+    elements.secretMessageInput.focus();
     return;
   }
 
@@ -601,7 +635,7 @@ async function runStegoPipeline() {
   } catch (err) {
     const msg = describeFetchError(err);
     writeLog(`[ERROR] Embedding failed: ${msg}`, "error");
-    alert(`Embedding failed: ${msg}`);
+    showInlineError(embedFooter(), `Embedding failed: ${msg}`, 'before');
   } finally {
     elements.btnEmbedPayload.disabled = false;
     setBtnLabel(elements.btnEmbedPayload, "Embed message");
@@ -611,8 +645,9 @@ async function runStegoPipeline() {
 // Page 3: calls POST /api/downscale, which runs the exact OpenCV algorithm
 // (nearest/bilinear/bicubic/lanczos/area) used in eval.py.
 async function runDownscalingAttack() {
+  clearInlineError(elements.btnSimulateAttack);
   if (!state.stegoImgData) {
-    alert("Embed a message in step 1, or upload a stego image here, first.");
+    showInlineError(elements.btnSimulateAttack, "No stego image yet. Embed a message in step 1, or upload a stego image above.");
     return;
   }
 
@@ -675,7 +710,7 @@ async function runDownscalingAttack() {
     track.classList.remove('busy');
     track.setAttribute('aria-valuenow', '0');
     elements.progressStatusText.innerText = "Attack failed. See the activity log.";
-    alert(`Downscale attack failed: ${msg}`);
+    showInlineError(elements.btnSimulateAttack, `Downscale attack failed: ${msg}`);
   } finally {
     elements.btnSimulateAttack.disabled = false;
     setBtnLabel(elements.btnSimulateAttack, "Run downscaling attack");
@@ -686,8 +721,10 @@ async function runDownscalingAttack() {
 // extraction) on the actually-downscaled image, and gets a real BER back
 // by comparing against the original message bits.
 async function runExtractionAndEvaluation() {
+  const extractBar = elements.btnExtractMessage.closest('.form-actions-bar') || elements.btnExtractMessage;
+  clearInlineError(extractBar);
   if (!state.downscaledImgData) {
-    alert("Run the attack in step 3, or upload an image on this page, first.");
+    showInlineError(extractBar, "No image to decode yet. Run the attack in step 3, or upload an image above.");
     return;
   }
 
@@ -772,7 +809,7 @@ async function runExtractionAndEvaluation() {
   } catch (err) {
     const msg = describeFetchError(err);
     writeLog(`[ERROR] Extraction failed: ${msg}`, "error");
-    alert(`Extraction failed: ${msg}`);
+    showInlineError(extractBar, `Extraction failed: ${msg}`);
   } finally {
     elements.btnExtractMessage.disabled = false;
     setBtnLabel(elements.btnExtractMessage, "Extract hidden message");
@@ -971,7 +1008,8 @@ function initReadFlow() {
       setReadHero('idle', 'Hidden message', 'Press Read hidden message.', '');
       updateStepProgress();
       writeLog(`[INFO] Read: image uploaded (${w}x${h}px).`, 'info');
-    } catch (err) { alert(err.message); }
+      clearInlineError(document.querySelector('#page-read .stego-input-status'));
+    } catch (err) { showInlineError(document.querySelector('#page-read .stego-input-status'), `${err.message} Choose another file.`); }
   });
   document.getElementById('btn-read-extract').addEventListener('click', runReadExtraction);
   document.getElementById('btn-read-check').addEventListener('click', runReadBerCheck);
@@ -1429,8 +1467,9 @@ function initApp() {
   });
 
   elements.btnImportLatest.addEventListener('click', () => {
+    clearInlineError(stegoSourceBox());
     if (!state.embedded) {
-      alert("No stego image yet. Embed a message in step 1 first.");
+      showInlineError(stegoSourceBox(), "No stego image from step 2 yet. Embed a message in step 1 first, or upload a stego image.");
       return;
     }
     const miniCtx = elements.miniStegoCanvas.getContext('2d');
@@ -1467,8 +1506,9 @@ function initApp() {
   });
 
   elements.btnImportAttacked.addEventListener('click', () => {
+    clearInlineError(attackedSourceBox());
     if (!state.attackSimulated) {
-      alert("No attacked image yet. Run the attack in step 3 first.");
+      showInlineError(attackedSourceBox(), "No attacked image from step 3 yet. Run the attack first, or upload an image.");
       return;
     }
     const miniCtx = elements.miniDownscaledCanvas.getContext('2d');
@@ -1505,7 +1545,8 @@ function initApp() {
       elements.stegoSourceStatus.innerText = `Uploaded image loaded (${w}x${h}px).`;
       elements.btnSimulateAttack.disabled = false;
       writeLog(`[INFO] Stego image uploaded from file (${w}x${h}px).`, "info");
-    } catch (err) { alert(err.message); }
+      clearInlineError(stegoSourceBox());
+    } catch (err) { showInlineError(stegoSourceBox(), `${err.message} Choose another file.`); }
   });
 
   document.getElementById('btn-upload-attacked').addEventListener('click', () => document.getElementById('attacked-file-input').click());
@@ -1522,7 +1563,8 @@ function initApp() {
       drawMini(elements.miniDownscaledCanvas, elements.attackOutputCanvas);
       elements.downscaledImportStatus.innerText = `Uploaded image loaded (${w}x${h}px). Ready.`;
       writeLog(`[INFO] Image for extraction uploaded from file (${w}x${h}px).`, "info");
-    } catch (err) { alert(err.message); }
+      clearInlineError(attackedSourceBox());
+    } catch (err) { showInlineError(attackedSourceBox(), `${err.message} Choose another file.`); }
   });
 
   elements.btnExportReport.addEventListener('click', () => {
