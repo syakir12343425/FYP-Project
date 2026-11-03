@@ -559,10 +559,6 @@ textarea.form-control,
 .sample-thumb-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .sample-thumb-btn span { font-size: var(--text-xs); color: var(--text-2); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .thumb-img { aspect-ratio: 1; border-radius: 6px; }
-.sample-lena-thumb { background: radial-gradient(circle, #fca5a5, #be123c); }
-.sample-mandrill-thumb { background: linear-gradient(45deg, #a7f3d0, #047857); }
-.sample-satellite-thumb { background: repeating-linear-gradient(45deg, #64748b, #64748b 10px, #475569 10px, #475569 20px); }
-.sample-medical-thumb { background: radial-gradient(circle at center, #ffffff 10%, #475569 60%, #0f172a 100%); }
 
 /* radio cards (method) */
 .method-selector-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
@@ -1263,3 +1259,14 @@ body[data-mode="hide"] .mode-read { display: none; }
 .flat-tip { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: 8px;
   font-size: var(--text-xs); color: var(--text-2); line-height: 1.5; }
 .next-step-note { margin-top: 0; }
+
+/* Design round 1 (3 Nov 2026) --------------------------------------------------------------
+   Item 2: the Embed button bar stays visible at the bottom of the Setup card while scrolling. */
+#page-embedding .card-footer-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding-bottom: var(--space-4);
+  margin-bottom: calc(-1 * var(--space-4));
+}

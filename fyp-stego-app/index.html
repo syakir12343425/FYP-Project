@@ -281,24 +281,24 @@
                   <div class="sample-selection">
                     <label class="field-hint">Choose a sample</label>
                     <div class="sample-grid">
-                      <button class="sample-thumb-btn active" type="button" data-sample="lena" title="Portrait (synthetic drawing, 512&times;512)" aria-pressed="true">
-                        <div class="thumb-img sample-lena-thumb"></div>
-                        <span>Portrait</span>
+                      <button class="sample-thumb-btn active" type="button" data-sample="astronaut" title="Astronaut (photo, 512&times;512)" aria-pressed="true">
+                        <div class="thumb-img"></div>
+                        <span>Astronaut</span>
                       </button>
-                      <button class="sample-thumb-btn" type="button" data-sample="mandrill" title="Mandrill (synthetic drawing, 512&times;512)" aria-pressed="false">
-                        <div class="thumb-img sample-mandrill-thumb"></div>
-                        <span>Mandrill</span>
+                      <button class="sample-thumb-btn" type="button" data-sample="coffee" title="Coffee (photo, 512&times;512)" aria-pressed="false">
+                        <div class="thumb-img"></div>
+                        <span>Coffee</span>
                       </button>
-                      <button class="sample-thumb-btn" type="button" data-sample="satellite" title="Aerial (synthetic drawing, 512&times;512)" aria-pressed="false">
-                        <div class="thumb-img sample-satellite-thumb"></div>
-                        <span>Aerial</span>
+                      <button class="sample-thumb-btn" type="button" data-sample="cat" title="Cat (photo, 512&times;512)" aria-pressed="false">
+                        <div class="thumb-img"></div>
+                        <span>Cat</span>
                       </button>
-                      <button class="sample-thumb-btn" type="button" data-sample="medical" title="Brain scan (synthetic drawing, 512&times;512)" aria-pressed="false">
-                        <div class="thumb-img sample-medical-thumb"></div>
-                        <span>Brain scan</span>
+                      <button class="sample-thumb-btn" type="button" data-sample="rocket" title="Rocket (photo with a large plain sky, 512&times;512)" aria-pressed="false">
+                        <div class="thumb-img"></div>
+                        <span>Rocket</span>
                       </button>
                     </div>
-                    <p class="field-note">These samples are simple synthetic drawings. The model was trained on natural photos, so expect higher BER on them; upload a photo for realistic results.</p>
+                    <p class="field-note">Real photos from the scikit-image sample set (public domain / CC0). The rocket photo has a large plain sky, where the CNN&rsquo;s faint pattern can show.</p>
                   </div>
                 </div>
 
@@ -322,15 +322,15 @@
                       <input type="radio" name="embedding-method" value="cnn" checked>
                       <div class="method-content">
                         <span class="method-title">CNN Encoder-Decoder (Robust)</span>
-                        <span class="method-desc">Trained against resizing and WhatsApp-style compression. About 35.5 dB PSNR.</span>
-                        <span class="method-tag tag-ai">Robust</span>
+                        <span class="method-desc">Best for photos and AI resizing. Error rate stays low at every resize size (1.3&ndash;2.2% on 100 test photos); 22 of 24 survived a WhatsApp sticker.</span>
+                        <span class="method-tag tag-ai">Photos &middot; AI resizing</span>
                       </div>
                     </label>
                     <label class="method-card">
                       <input type="radio" name="embedding-method" value="lsb">
                       <div class="method-content">
                         <span class="method-title">LSB Steganography (Standard)</span>
-                        <span class="method-desc">Writes bits into pixel least significant bits. About 80 dB PSNR, but destroyed by resizing.</span>
+                        <span class="method-desc">Completely invisible, but any resize or compression destroys the message (0 of 24 survived a WhatsApp sticker).</span>
                         <span class="method-tag tag-std">Baseline</span>
                       </div>
                     </label>
@@ -338,16 +338,16 @@
                       <input type="radio" name="embedding-method" value="dct">
                       <div class="method-content">
                         <span class="method-title">DCT (Classical)</span>
-                        <span class="method-desc">Orders two mid-frequency DCT coefficients in an 8&times;8 block per bit. About 40 dB PSNR.</span>
-                        <span class="method-tag tag-std">Frequency domain</span>
+                        <span class="method-desc">Best for flat images such as cartoon stickers; 24 of 24 survived a WhatsApp sticker. Weaker when shrunk a lot.</span>
+                        <span class="method-tag tag-std">Stickers &middot; WhatsApp</span>
                       </div>
                     </label>
                     <label class="method-card">
                       <input type="radio" name="embedding-method" value="dwt">
                       <div class="method-content">
                         <span class="method-title">DWT (Classical)</span>
-                        <span class="method-desc">Quantises one Haar low-frequency coefficient per 16&times;16 block. About 41 dB PSNR; weak against nearest-neighbour.</span>
-                        <span class="method-tag tag-std">Wavelet domain</span>
+                        <span class="method-desc">Classical wavelet method; 24 of 24 survived a WhatsApp sticker, but it fails with nearest-neighbour resizing.</span>
+                        <span class="method-tag tag-std">Classical</span>
                       </div>
                     </label>
                   </div>
@@ -403,7 +403,7 @@
                   </div>
                   <div class="console-body" id="embedding-console" role="log" aria-live="polite" aria-label="Activity log">
                     <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
-                    <div class="log-line info">[INFO] Sample 'Portrait' loaded (synthetic drawing).</div>
+                    <div class="log-line info">[INFO] Sample photo 'Astronaut' loaded.</div>
                     <div class="log-line info">[INFO] Payload: 1,024 bits = up to 63 message bytes + 64 Reed-Solomon parity bytes.</div>
                   </div>
                 </div>
@@ -815,7 +815,8 @@
                     </div>
                   </div>
 
-                  <div class="metrics-grid grid-2-small">
+                  <!-- Hidden unless the server measured them (only for an image from this session's attack). -->
+                  <div class="metrics-grid grid-2-small" id="extract-quality-grid" hidden>
                     <div class="mini-metric-card">
                       <span class="m-label">PSNR</span>
                       <span class="m-val" id="extract-psnr">--</span>
@@ -864,13 +865,18 @@
                   </svg>
                 </div>
                 <h3><span class="fig-num">4.2</span> Benchmark</h3>
+                <!-- Design round 1: two views instead of everything at once. -->
+                <div class="comparison-mode-selector" role="group" aria-label="Benchmark view">
+                  <button type="button" class="mode-btn bench-tab" data-bench-tab="run" aria-pressed="false">This run</button>
+                  <button type="button" class="mode-btn bench-tab active" data-bench-tab="size" aria-pressed="true">By size</button>
+                </div>
               </div>
               <div class="card-body benchmark-body">
                 
                 <!-- SVG-based line chart comparing LSB vs CNN BER at different scales.
                      Real averages from eval_summary.csv (100 images x 5 algorithms,
                      averaged per size). Page 3 offers exactly these four sizes. -->
-                <div class="chart-container">
+                <div class="chart-container bench-panel" data-bench-panel="size">
                   <div class="chart-head">
                     <span class="chart-title">Benchmark BER by output size</span>
                     <div class="chart-legend">
@@ -896,7 +902,7 @@
                 </div>
 
                 <!-- Comparison Table -->
-                <div class="table-container">
+                <div class="table-container bench-panel" data-bench-panel="run" hidden>
                   <span class="table-title">This run vs benchmark</span>
                   <table class="academic-table">
                     <thead>

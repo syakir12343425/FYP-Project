@@ -67,7 +67,13 @@ const METHODS = {
 const methodInfo = (m) => METHODS[m] || METHODS.cnn;
 
 // Display names for the built-in synthetic sample drawings (keys = data-sample values).
-const SAMPLE_NAMES = { lena: 'Portrait', mandrill: 'Mandrill', satellite: 'Aerial', medical: 'Brain scan' };
+const SAMPLES = {
+  astronaut: { name: 'Astronaut', file: 'assets/samples/astronaut.jpg' },
+  coffee:    { name: 'Coffee',    file: 'assets/samples/coffee.jpg' },
+  cat:       { name: 'Cat',       file: 'assets/samples/cat.jpg' },
+  rocket:    { name: 'Rocket',    file: 'assets/samples/rocket.jpg' },
+};
+const SAMPLE_NAMES = Object.fromEntries(Object.entries(SAMPLES).map(([k, v]) => [k, v.name]));
 
 // Payload layout (must match payload.py): 63 message bytes + 1 length byte + 64 Reed-Solomon parity bytes.
 const MAX_MESSAGE_BYTES = 63;
@@ -181,7 +187,7 @@ const state = {
   message: '',
   method: 'cnn', // 'cnn' or 'lsb'
   embedded: false,
-  coverScene: 'lena', // 'lena', 'mandrill', 'satellite', 'medical'
+  coverScene: 'astronaut', // a SAMPLES key, or 'Uploaded File'
   coverImgData: null,
 
   // Embedding Results
@@ -293,178 +299,24 @@ const elements = {
   reportCnnBer: document.getElementById('report-cnn-ber')
 };
 
-// Procedural Image Generator (Generates stunning test textures inside canvases)
-function drawProceduralImage(canvas, scene) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-
-  ctx.clearRect(0, 0, w, h);
-
-  if (scene === 'lena') {
-    // Academic standard Lena lookalike: pinkish skin hues, feather/hat details
-    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
-    bgGrad.addColorStop(0, '#581c3f');
-    bgGrad.addColorStop(0.5, '#701a35');
-    bgGrad.addColorStop(1, '#9f1239');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = '#fda4af';
-    ctx.beginPath();
-    ctx.ellipse(w*0.35, h*0.5, w*0.3, h*0.2, Math.PI/4, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = '#fecdd3';
-    ctx.beginPath();
-    ctx.arc(w*0.5, h*0.45, w*0.18, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.ellipse(w*0.46, h*0.43, w*0.02, h*0.01, 0, 0, Math.PI*2);
-    ctx.ellipse(w*0.54, h*0.43, w*0.02, h*0.01, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = '#be123c';
-    ctx.beginPath();
-    ctx.ellipse(w*0.5, h*0.53, w*0.03, h*0.01, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.moveTo(w*0.2, h*0.35);
-    ctx.quadraticCurveTo(w*0.5, h*0.15, w*0.8, h*0.35);
-    ctx.quadraticCurveTo(w*0.5, h*0.42, w*0.2, h*0.35);
-    ctx.fill();
-
-    ctx.strokeStyle = '#ffe4e6';
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 15; i++) {
-      ctx.beginPath();
-      ctx.moveTo(w*0.25 + i*8, h*0.5);
-      ctx.quadraticCurveTo(w*0.3 + i*6, h*0.65, w*0.1 + i*5, h*0.8);
-      ctx.stroke();
-    }
-  }
-  else if (scene === 'mandrill') {
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(0, 0, w, h);
-
-    const cheekGrad = ctx.createLinearGradient(0, 0, w, 0);
-    cheekGrad.addColorStop(0.2, '#0284c7');
-    cheekGrad.addColorStop(0.5, '#0f172a');
-    cheekGrad.addColorStop(0.8, '#0284c7');
-    ctx.fillStyle = cheekGrad;
-    ctx.beginPath();
-    ctx.ellipse(w*0.5, h*0.55, w*0.35, h*0.2, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#fef08a';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 400; i++) {
-      const rx = Math.random() * w;
-      const ry = h*0.65 + Math.random() * (h*0.35);
-      ctx.beginPath();
-      ctx.moveTo(rx, ry);
-      ctx.lineTo(rx + (Math.random() - 0.5) * 10, ry + Math.random() * 20);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(w*0.44, h*0.2, w*0.12, h*0.42);
-
-    ctx.fillStyle = '#facc15';
-    ctx.beginPath();
-    ctx.arc(w*0.36, h*0.28, w*0.04, 0, Math.PI*2);
-    ctx.arc(w*0.64, h*0.28, w*0.04, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(w*0.36, h*0.28, w*0.015, 0, Math.PI*2);
-    ctx.arc(w*0.64, h*0.28, w*0.015, 0, Math.PI*2);
-    ctx.fill();
-  }
-  else if (scene === 'satellite') {
-    ctx.fillStyle = '#1e3a1e';
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = '#4d7c0f';
-    ctx.lineWidth = 1;
-    for(let i=0; i<w; i+=32) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0); ctx.lineTo(i, h);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, i); ctx.lineTo(w, i);
-      ctx.stroke();
-    }
-
-    for(let r=0; r<16; r++) {
-      for(let c=0; c<16; c++) {
-        if((r+c) % 3 === 0) {
-          ctx.fillStyle = '#3f6212';
-          ctx.fillRect(c*32+1, r*32+1, 30, 30);
-        } else if((r+c) % 5 === 0) {
-          ctx.fillStyle = '#7c2d12';
-          ctx.fillRect(c*32+1, r*32+1, 30, 30);
-        }
-      }
-    }
-
-    ctx.strokeStyle = '#2563eb';
-    ctx.lineWidth = 14;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(0, h*0.1);
-    ctx.bezierCurveTo(w*0.3, h*0.2, w*0.4, h*0.8, w, h*0.6);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(w*0.1, 0);
-    ctx.lineTo(w*0.8, h);
-    ctx.stroke();
-  }
-  else if (scene === 'medical') {
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.ellipse(w*0.5, h*0.5, w*0.38, h*0.44, 0, 0, Math.PI*2);
-    ctx.stroke();
-
-    ctx.fillStyle = '#475569';
-    ctx.beginPath();
-    ctx.ellipse(w*0.5, h*0.5, w*0.34, h*0.4, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 3;
-    for(let i=0; i<18; i++) {
-      ctx.beginPath();
-      ctx.arc(w*0.5 + Math.cos(i) * w * 0.2, h*0.5 + Math.sin(i) * h * 0.25, w*0.08, 0, Math.PI);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = '#020617';
-    ctx.beginPath();
-    ctx.moveTo(w*0.5, h*0.35);
-    ctx.bezierCurveTo(w*0.4, h*0.38, w*0.4, h*0.5, w*0.48, h*0.52);
-    ctx.bezierCurveTo(w*0.4, h*0.55, w*0.42, h*0.62, w*0.5, h*0.65);
-    ctx.bezierCurveTo(w*0.58, h*0.62, w*0.6, h*0.55, w*0.52, h*0.52);
-    ctx.bezierCurveTo(w*0.6, h*0.5, w*0.6, h*0.38, w*0.5, h*0.35);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
+// Built-in sample covers (3 Nov 2026): real photos instead of synthetic drawings. The drawings were flat,
+// so every one triggered the flat-area tip and made the CNN's grid visible in demos. Photos from the
+// scikit-image sample set: astronaut (public domain, NASA), coffee (CC0, Rachel Michetti), cat "Chelsea"
+// (CC0, Stefan van der Walt), rocket (public domain, SpaceX). Centre-cropped and resized to 512x512.
+function loadSamplePhoto(canvas, key) {
+  return new Promise((resolve, reject) => {
+    const sample = SAMPLES[key];
+    if (!sample) return reject(new Error(`Unknown sample: ${key}`));
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve();
+    };
+    img.onerror = () => reject(new Error(`Could not load ${sample.file}`));
+    img.src = sample.file;
+  });
 }
 
 // Log Terminal writer
@@ -875,9 +727,11 @@ async function runExtractionAndEvaluation() {
     state.extractedSsim = data.extracted_ssim;
     elements.extractPsnr.innerText = data.extracted_psnr != null ? `${data.extracted_psnr.toFixed(2)} dB` : 'N/A';
     elements.extractSsim.innerText = data.extracted_ssim != null ? data.extracted_ssim.toFixed(4) : 'N/A';
+    document.getElementById('extract-quality-grid').hidden = data.extracted_psnr == null && data.extracted_ssim == null;
 
     updateBenchmarkTable();
     renderBenchmarkChart();
+    setBenchTab('run');
     if (berKnown) {
       updateAcademicSummaryParagraph();
     } else {
@@ -902,6 +756,16 @@ async function runExtractionAndEvaluation() {
     elements.btnExtractMessage.disabled = false;
     setBtnLabel(elements.btnExtractMessage, "Extract hidden message");
   }
+}
+
+// Benchmark card tabs (design round 1): "This run" = comparison table, "By size" = chart + size table.
+function setBenchTab(name) {
+  document.querySelectorAll('.bench-tab').forEach(b => {
+    const on = b.dataset.benchTab === name;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  document.querySelectorAll('.bench-panel').forEach(p => { p.hidden = p.dataset.benchPanel !== name; });
 }
 
 // ------------------------------------------------------------------ flat-area tip (3 Nov 2026)
@@ -1280,14 +1144,12 @@ function renderBenchmarkChart() {
 
 // UI-only setup: nothing here touches the server, auth or measured numbers.
 function initPhase3Ui() {
-  // Sample thumbnails show the actual drawings instead of unrelated gradients.
+  // Sample thumbnails show the actual photos.
   elements.sampleThumbButtons.forEach(btn => {
     const thumb = btn.querySelector('.thumb-img');
-    if (!thumb) return;
-    const c = document.createElement('canvas');
-    c.width = 160; c.height = 160;
-    drawProceduralImage(c, btn.getAttribute('data-sample'));
-    thumb.style.backgroundImage = `url(${c.toDataURL('image/png')})`;
+    const sample = SAMPLES[btn.getAttribute('data-sample')];
+    if (!thumb || !sample) return;
+    thumb.style.backgroundImage = `url(${sample.file})`;
     thumb.classList.add('thumb-drawn');
   });
 
@@ -1354,6 +1216,7 @@ function updateAcademicSummaryParagraph() {
 // Initialize Application Events
 function initApp() {
   initReadFlow();
+  document.querySelectorAll('.bench-tab').forEach(b => b.addEventListener('click', () => setBenchTab(b.dataset.benchTab)));
 
   elements.navButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1384,9 +1247,10 @@ function initApp() {
       state.coverScene = sampleType;
       state.coverLoaded = true;
 
-      drawProceduralImage(elements.coverCanvas, sampleType);
-      updateFlatTip();
-      writeLog(`[INFO] Sample '${SAMPLE_NAMES[sampleType] || sampleType}' loaded (synthetic drawing).`, "info");
+      loadSamplePhoto(elements.coverCanvas, sampleType).then(() => {
+        updateFlatTip();
+        writeLog(`[INFO] Sample photo '${SAMPLE_NAMES[sampleType] || sampleType}' loaded.`, "info");
+      }).catch(err => writeLog(`[ERROR] ${err.message}`, "error"));
     });
   });
 
@@ -1444,8 +1308,8 @@ function initApp() {
   elements.btnResetEmbedding.addEventListener('click', () => {
     elements.secretMessageInput.value = "Hidden message that survives downscaling.";
     updatePayloadMetrics();
-    const thumbLena = document.querySelector('.sample-thumb-btn[data-sample="lena"]');
-    if (thumbLena) thumbLena.click();
+    const firstSample = document.querySelector('.sample-thumb-btn[data-sample="astronaut"]');
+    if (firstSample) firstSample.click();
     writeLog("[SYSTEM] Configuration settings reset to academic defaults.", "system");
   });
 
@@ -1581,7 +1445,7 @@ function initApp() {
 
   elements.btnExportReport.addEventListener('click', () => {
     elements.reportDate.innerText = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    const coverName = SAMPLE_NAMES[state.coverScene] ? `${SAMPLE_NAMES[state.coverScene]} (synthetic sample)` : state.coverScene;
+    const coverName = SAMPLE_NAMES[state.coverScene] ? `${SAMPLE_NAMES[state.coverScene]} (scikit-image sample photo)` : state.coverScene;
     elements.reportCoverName.innerText = `${coverName}, 512x512 px`;
     elements.reportMsgLen.innerText = `${[...state.message].length} characters (${utf8Bytes(state.message)} of ${MAX_MESSAGE_BYTES} bytes; 1024 bits with error correction)`;
 
@@ -1628,8 +1492,7 @@ function initApp() {
     window.print();
   });
 
-  drawProceduralImage(elements.coverCanvas, 'lena');
-  updateFlatTip();
+  loadSamplePhoto(elements.coverCanvas, 'astronaut').then(updateFlatTip).catch(() => {});
   updatePayloadMetrics();
   updateThreatVectorInfo();
   updateStepProgress();
