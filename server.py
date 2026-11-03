@@ -1,7 +1,7 @@
 """
 Inference server for the FYP steganography frontend.
 
-Loads the trained CNN (checkpoints/best.pt) once at startup and exposes three
+Loads the trained CNN (checkpoints_chroma/best.pt) once at startup and exposes three
 endpoints that map directly onto the four pages of index.html:
 
     POST /api/embed       cover image + message + method -> stego image + psnr/ssim
@@ -9,7 +9,7 @@ endpoints that map directly onto the four pages of index.html:
     POST /api/extract     image + method + original message -> recovered message + ber
 
 Run it from inside the fyp_stego/ folder (so `models.py`, `downscale.py`,
-`lsb_baseline.py` are importable, and `checkpoints/best.pt` exists next to it):
+`lsb_baseline.py` are importable, and `checkpoints_chroma/best.pt` exists next to it):
 
     pip install fastapi uvicorn pillow scikit-image python-multipart opencv-python-headless
     uvicorn server:app --reload --host 0.0.0.0 --port 8000
@@ -48,7 +48,11 @@ from db import AdminUser, SessionLocal, audit, get_db, init_db
 
 MESSAGE_BITS = 1024          # must match training (configs/config.yaml -> message.bits)
 assert MESSAGE_BITS == PAYLOAD_BITS, "payload.py and server.py disagree on payload size"
-CHECKPOINT_PATH = "checkpoints/best.pt"   # copy best.pt down from Drive to here
+# The app's CNN (3 Nov 2026): the colour-penalty fine-tuned model (run 1, epoch 1), chosen on the
+# independent Kodak24 test (Results log section 7). The first model stays in checkpoints/best.pt for
+# experiments. The UI's REFERENCE numbers in app.js were measured for THIS checkpoint; if you change it,
+# re-run tools/benchmark_methods.py and update them, or the UI will show numbers for a different model.
+CHECKPOINT_PATH = "checkpoints_chroma/best.pt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 is_prod = config.ENV == "prod"
@@ -94,17 +98,18 @@ async def security_middleware(request: Request, call_next):
 app.include_router(auth_router)
 
 # ---------------------------------------------------------------- model load
-encoder = Encoder(message_bits=MESSAGE_BITS).to(DEVICE)
+_ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
+_luma_only = _ckpt.get("config", {}).get("model", {}).get("luma_only", False)   # brightness-only models
+encoder = Encoder(message_bits=MESSAGE_BITS, luma_only=_luma_only).to(DEVICE)
 decoder = Decoder(message_bits=MESSAGE_BITS).to(DEVICE)
 
-_ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
 encoder.load_state_dict(_ckpt["encoder"])
 decoder.load_state_dict(_ckpt["decoder"])
 encoder.eval()
 decoder.eval()
 print(
     f"Loaded {CHECKPOINT_PATH} (epoch {_ckpt.get('epoch')}, "
-    f"val_ber={_ckpt.get('val_ber')}, val_psnr={_ckpt.get('val_psnr')}) on {DEVICE}"
+    f"val_ber={_ckpt.get('val_ber')}, val_psnr={_ckpt.get('val_psnr')}, luma_only={_luma_only}) on {DEVICE}"
 )
 
 

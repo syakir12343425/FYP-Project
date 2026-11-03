@@ -11,46 +11,54 @@
 // Change to your VPS address once you deploy it there, e.g. "https://api.yourdomain.com".
 const API_BASE = "http://localhost:8000"; // use your HTTPS API domain on the VPS
 
-// Real aggregate numbers from the full eval.py benchmark
-// (100 validation images x 5 algorithms x 4 sizes), used as reference
-// values in the comparison table / report so the UI never shows invented numbers.
+// Real aggregate numbers, all four methods from ONE tool and the same attacks (3 Nov 2026):
+// tools/benchmark_methods.py --images data/DIV2K_valid_HR --limit 100
+// = 100 DIV2K validation images x 5 algorithms x 4 sizes = 2,000 attacks per method.
+// CNN = colour-penalty fine-tuned model (checkpoints_chroma/best.pt, results/div2k_cnn_chroma_e1.csv);
+// LSB/DCT/DWT = results/div2k_methods_default.csv (DCT T=50, DWT S=128, the server defaults).
+// exact = share of attacks where the whole message was recovered after Reed-Solomon.
+// Used as reference values in the comparison table / report so the UI never shows invented numbers.
+const BENCH_ATTACKS = 2000;
 const REFERENCE = {
-  cnn: { ber: 1.15, psnr: 32.13, ssim: 0.9514 },
-  lsb: { ber: 48.00, psnr: 79.99, ssim: 0.9999 },
+  cnn: { ber: 2.00, psnr: 36.62, ssim: 0.9824, exact: 86.2 },
+  lsb: { ber: 45.43, psnr: 79.98, ssim: 1.0000, exact: 0.0 },
+  dct: { ber: 4.19, psnr: 40.12, ssim: 0.9739, exact: 64.0 },
+  dwt: { ber: 7.14, psnr: 40.76, ssim: 0.9885, exact: 70.3 },
 };
 
-// Per-size averages from eval_summary.csv (mean over 100 images x 5 algorithms). These are the
-// exact values the old static chart showed; the chart and size table are now drawn from here.
+// Per-size mean BER from the same runs (mean over 100 images x 5 algorithms).
 const BENCHMARK_BY_SIZE = {
   sizes:  [384, 299, 256, 224],
   scales: [0.75, 0.58398438, 0.5, 0.4375],   // must match the Page 3 radio values
-  cnn:    [1.04, 1.18, 1.19, 1.27],
-  lsb:    [44.3, 49.2, 44.7, 49.4],
+  cnn:    [1.59, 2.02, 2.05, 2.35],
+  lsb:    [39.56, 45.56, 47.12, 49.48],
+  dct:    [0.90, 4.06, 3.15, 8.65],
+  dwt:    [4.95, 7.41, 4.72, 11.47],
 };
 
 // The four embedding methods. Every label in the UI reads from here.
-// bench: true only where REFERENCE holds DIV2K (eval.py) numbers; DCT/DWT are not benchmarked on DIV2K yet.
+// bench: true where REFERENCE holds DIV2K numbers (now all four methods).
 const METHODS = {
   cnn: {
     short: 'CNN', long: 'CNN encoder-decoder', bench: true,
-    log: 'Running CNN encoder (trained model, checkpoints/best.pt)...',
-    details: 'The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The cost is image quality: about 32 dB PSNR, versus about 80 dB for LSB.',
+    log: 'Running CNN encoder (colour-penalty model, checkpoints_chroma/best.pt)...',
+    details: 'The encoder and decoder were trained together with a differentiable downscaling layer between them (nearest, bilinear, bicubic and area, to 224-384 px), so the hidden bits are spread in a way that survives resizing. Lanczos was held out of training as a generalisation test. The first model hid the message mostly in colour and left a visible tint (about 32 dB PSNR); this model was fine-tuned with a penalty on colour change, giving about 37 dB PSNR.',
     failHint: 'Likely causes: a cover image unlike the natural photos used in training (e.g. flat colours or graphics), or an image altered by something other than the selected resize (e.g. JPEG re-compression).',
   },
   lsb: {
     short: 'LSB', long: 'LSB baseline', bench: true,
     log: 'Running spatial LSB embed (lowest bit plane)...',
     details: 'Least Significant Bit embedding writes each message bit into the lowest bit of a pixel value. The change is invisible (about 80 dB PSNR), but resizing recomputes every pixel value, so those exact bits do not survive.',
-    failHint: 'Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 48.00%, no better than guessing.',
+    failHint: 'Resizing resamples pixel values, so the least significant bits do not survive. The benchmark average for LSB is 45.43%, no better than guessing.',
   },
   dct: {
-    short: 'DCT', long: 'DCT (coefficient pair)', bench: false,
+    short: 'DCT', long: 'DCT (coefficient pair)', bench: true,
     log: 'Running DCT embed (8x8 blocks, coefficient pair (2,3)/(3,2))...',
-    details: 'Classical frequency-domain method. The luminance is split into 8x8 blocks; each bit sets the order of two mid-frequency DCT coefficients in one block. Those frequencies mostly survive downscaling, with more errors at smaller sizes. About 41 dB PSNR at the default strength.',
+    details: 'Classical frequency-domain method. The luminance is split into 8x8 blocks; each bit sets the order of two mid-frequency DCT coefficients in one block. Those frequencies mostly survive downscaling, with more errors at smaller sizes. About 40 dB PSNR at the default strength.',
     failHint: 'The DCT pair sits close to the highest frequency a small output keeps, so errors grow at 224-256 px and on fine textures.',
   },
   dwt: {
-    short: 'DWT', long: 'DWT (LL-band QIM)', bench: false,
+    short: 'DWT', long: 'DWT (LL-band QIM)', bench: true,
     log: 'Running DWT embed (4-level Haar, LL-band QIM)...',
     details: 'Classical wavelet method. A 4-level Haar transform gives one low-frequency coefficient per 16x16 block; each bit is set by quantising that coefficient (QIM), which shifts the block brightness slightly. Block averages survive averaging resizes very well. About 41 dB PSNR at the default step.',
     failHint: 'The DWT relies on block averages; nearest-neighbour resizing keeps single pixels instead of averaging them, which is its known weak case.',
@@ -68,7 +76,7 @@ const MAX_MESSAGE_BYTES = 63;
 const smallerLabel = (scale) => `${Math.round((1 - scale) * 100)}% smaller`;
 
 // ONE set of success thresholds for the whole UI. Must match configs/config.yaml (eval section).
-// The CNN's embedding PSNR (~32 dB) is BELOW the 35 dB target: that is a real, stated limitation.
+// The first CNN (~32 dB) was below the 35 dB target; the colour-penalty model (36.62 dB) meets it.
 const THRESHOLDS = { ber: 5, psnr: 35, ssim: 0.95 };
 
 // Payload size is counted in UTF-8 BYTES (what the server embeds), not JS string length.
@@ -1007,7 +1015,8 @@ function renderBenchmarkChart() {
   };
 
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img',
-    'aria-label': 'Benchmark BER per output size. CNN about 1.0 to 1.3 percent, LSB about 44 to 49 percent.' });
+    'aria-label': `Benchmark BER per output size. CNN ${Math.min(...BENCHMARK_BY_SIZE.cnn)} to ${Math.max(...BENCHMARK_BY_SIZE.cnn)} percent, ` +
+      `LSB ${Math.min(...BENCHMARK_BY_SIZE.lsb)} to ${Math.max(...BENCHMARK_BY_SIZE.lsb)} percent.` });
 
   [0, 10, 20, 30, 40, 50].forEach(v => {
     svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v === 0 ? 'chart-axis' : 'chart-grid' }));
@@ -1082,8 +1091,8 @@ function initPhase3Ui() {
 // Small exact-number table under the chart (the chart shows shape, this shows values).
 function renderSizeTable() {
   const row = (m) => `<tr><td><span class="method-cell ${m}-cell">${m.toUpperCase()}</span></td>` +
-    BENCHMARK_BY_SIZE[m].map(v => `<td class="${v <= THRESHOLDS.ber ? 'better-val' : 'worse-val'}">${v}%</td>`).join('') + '</tr>';
-  document.getElementById('size-table-rows').innerHTML = row('cnn') + row('lsb');
+    BENCHMARK_BY_SIZE[m].map(v => `<td class="${v <= THRESHOLDS.ber ? 'better-val' : 'worse-val'}">${v.toFixed(2)}%</td>`).join('') + '</tr>';
+  document.getElementById('size-table-rows').innerHTML = row('cnn') + row('lsb') + row('dct') + row('dwt');
 }
 
 // Research summary for the run that just happened. The wording follows the MEASURED result
@@ -1106,16 +1115,16 @@ function updateAcademicSummaryParagraph() {
   let summary;
   if (state.method === 'lsb') {
     summary = ok
-      ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is unusual for LSB and is not what the benchmark shows (48.00% average); check that the image was actually downscaled.`
+      ? `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is unusual for LSB and is not what the benchmark shows (${REFERENCE.lsb.ber.toFixed(2)}% average); check that the image was actually downscaled.`
       : `LSB extraction after ${attack} gave <strong>${ber}% BER</strong>, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} ${info.failHint}`;
   } else if (state.method === 'cnn') {
     summary = ok
-      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across 2,000 attacks is 1.15%.`
-      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is worse than the 1.15% benchmark average. ${info.failHint}`;
+      ? `The CNN decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across ${BENCH_ATTACKS.toLocaleString('en')} attacks is ${REFERENCE.cnn.ber.toFixed(2)}% (exact message in ${REFERENCE.cnn.exact}% of attacks).`
+      : `The CNN decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} This is worse than the ${REFERENCE.cnn.ber.toFixed(2)}% benchmark average. ${info.failHint}`;
   } else {
     summary = ok
-      ? `The ${info.long} decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote}`
-      : `The ${info.long} decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} ${info.failHint}`;
+      ? `The ${info.long} decoder recovered the payload after ${attack} with <strong>${ber}% BER</strong>, within the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average across ${BENCH_ATTACKS.toLocaleString('en')} attacks is ${REFERENCE[state.method].ber.toFixed(2)}%.`
+      : `The ${info.long} decoder gave <strong>${ber}% BER</strong> after ${attack}, above the ${THRESHOLDS.ber}% threshold.${exact}${eccNote} The benchmark average is ${REFERENCE[state.method].ber.toFixed(2)}%. ${info.failHint}`;
   }
   elements.evaluationSummaryText.innerHTML = summary;
 }
@@ -1357,7 +1366,7 @@ function initApp() {
     elements.reportTableScale.innerText = attacked
       ? `${smallerLabel(state.attackScale)} (${elements.attackOutputCanvas.width}x${elements.attackOutputCanvas.height} px)` : '--';
 
-    // Benchmark rows: always the real eval.py averages (REFERENCE), never per-run numbers.
+    // Benchmark rows: always the real benchmark averages (REFERENCE), never per-run numbers.
     elements.reportLsbBer.innerText = `${REFERENCE.lsb.ber.toFixed(2)}%`;
     elements.reportCnnBer.innerText = `${REFERENCE.cnn.ber.toFixed(2)}%`;
     document.getElementById('report-lsb-psnr').innerText = `${REFERENCE.lsb.psnr.toFixed(2)} dB`;
