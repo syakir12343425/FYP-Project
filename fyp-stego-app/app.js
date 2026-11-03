@@ -20,11 +20,30 @@ const API_BASE = "http://localhost:8000"; // use your HTTPS API domain on the VP
 // Used as reference values in the comparison table / report so the UI never shows invented numbers.
 const BENCH_ATTACKS = 2000;
 const REFERENCE = {
-  cnn: { ber: 1.76, psnr: 35.54, ssim: 0.9767, exact: 88.9 },
-  lsb: { ber: 45.43, psnr: 79.98, ssim: 1.0000, exact: 0.0 },
-  dct: { ber: 4.19, psnr: 40.12, ssim: 0.9739, exact: 64.0 },
-  dwt: { ber: 7.14, psnr: 40.76, ssim: 0.9885, exact: 70.3 },
+  cnn: { ber: 1.76, psnr: 35.54, ssim: 0.9767, exact: 88.9, worst: 16.89 },
+  lsb: { ber: 45.43, psnr: 79.98, ssim: 1.0000, exact: 0.0, worst: 63.18 },
+  dct: { ber: 4.19, psnr: 40.12, ssim: 0.9739, exact: 64.0, worst: 30.96 },
+  dwt: { ber: 7.14, psnr: 40.76, ssim: 0.9885, exact: 70.3, worst: 50.49 },
 };
+
+// WhatsApp stickers (Results log 9d, 9c-2): tools/sticker_test.py on the 24 Kodak photos at WebP quality 90,
+// the setting measured from real WhatsApp Web stickers. CNN = model D (the app's model).
+const STICKER_RESULTS = {
+  photos: 24,
+  cnn: { survived: 22, ber: 2.18 },
+  dct: { survived: 24, ber: 0.01 },
+  dwt: { survived: 24, ber: 0.56 },
+  lsb: { survived: 0, ber: 49.83 },
+};
+// One real send per method through WhatsApp Web (3 Nov 2026, cartoon sticker covers; CNN made with the
+// earlier model A). DWT was not sent.
+const REAL_SEND = {
+  cnn: 'Exact (2.73% BER, model A)',
+  dct: 'Exact (0.68% BER)',
+  dwt: 'Not tested',
+  lsb: 'Failed (52.15% BER)',
+};
+const METHOD_ORDER = ['cnn', 'dct', 'dwt', 'lsb'];
 
 // Per-size mean BER from the same runs (mean over 100 images x 5 algorithms).
 const BENCHMARK_BY_SIZE = {
@@ -349,7 +368,8 @@ function applyTheme(theme) {
 const PAGE_ORDER = ['page-embedding', 'page-result', 'page-downscaling', 'page-extraction'];
 
 // Which flow a page belongs to: the Start page, the 4-step Hide flow, or the 1-step Read flow.
-const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 'read' : 'hide');
+const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 'read'
+  : id === 'page-results' ? 'results' : 'hide');
 
 function handleNavigation(targetId) {
   document.body.dataset.mode = pageMode(targetId);
@@ -365,6 +385,7 @@ function handleNavigation(targetId) {
       document.getElementById('topbar-step').textContent =
         mode === 'home' ? 'Start'
           : mode === 'read' ? 'Read a message'
+          : mode === 'results' ? 'Results'
           : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
     } else {
       btn.classList.remove('active');
@@ -1086,8 +1107,11 @@ function renderMessageDiff(expected, recovered) {
 }
 
 // Benchmark chart (SVG built with DOM APIs; colours come from CSS classes so both themes work).
-function renderBenchmarkChart() {
-  const host = document.getElementById('svg-chart-wrapper');
+// Draws the four methods' benchmark BER per size. Used on Page 4 (with this run's marker) and on the
+// Results page (withRun = false).
+function renderBenchmarkChart(hostId = 'svg-chart-wrapper', withRun = true) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
   const NS = 'http://www.w3.org/2000/svg';
   const W = 460, H = 230, L = 44, R = 16, T = 14, B = 40;
   const yMax = 55;
@@ -1101,8 +1125,8 @@ function renderBenchmarkChart() {
   };
 
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img',
-    'aria-label': `Benchmark BER per output size. CNN ${Math.min(...BENCHMARK_BY_SIZE.cnn)} to ${Math.max(...BENCHMARK_BY_SIZE.cnn)} percent, ` +
-      `LSB ${Math.min(...BENCHMARK_BY_SIZE.lsb)} to ${Math.max(...BENCHMARK_BY_SIZE.lsb)} percent.` });
+    'aria-label': 'Benchmark BER per output size. ' + METHOD_ORDER.map(m =>
+      `${m.toUpperCase()} ${Math.min(...BENCHMARK_BY_SIZE[m])} to ${Math.max(...BENCHMARK_BY_SIZE[m])} percent`).join(', ') + '.' });
 
   [0, 10, 20, 30, 40, 50].forEach(v => {
     svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v === 0 ? 'chart-axis' : 'chart-grid' }));
@@ -1117,7 +1141,7 @@ function renderBenchmarkChart() {
       smallerLabel(BENCHMARK_BY_SIZE.scales[i])));
   });
 
-  for (const m of ['lsb', 'cnn']) {
+  for (const m of ['lsb', 'dwt', 'dct', 'cnn']) {   // CNN drawn last, on top
     const pts = BENCHMARK_BY_SIZE[m].map((v, i) => `${xs[i]},${y(v)}`).join(' ');
     svg.appendChild(el('polyline', { points: pts, class: `series-line series-${m}` }));
     BENCHMARK_BY_SIZE[m].forEach((v, i) => {
@@ -1129,8 +1153,8 @@ function renderBenchmarkChart() {
 
   // this run (only when the attack size is known, i.e. the attack ran in this session)
   const idx = BENCHMARK_BY_SIZE.scales.indexOf(state.attackScale);
-  const showRun = state.extracted && state.ber !== null && !state.downscaledUploaded && idx >= 0;
-  document.getElementById('run-legend').hidden = !showRun;
+  const showRun = withRun && state.extracted && state.ber !== null && !state.downscaledUploaded && idx >= 0;
+  if (withRun) document.getElementById('run-legend').hidden = !showRun;
   if (showRun) {
     const pass = state.ber <= THRESHOLDS.ber;
     const cx = xs[idx], cy = y(state.ber);
@@ -1140,6 +1164,63 @@ function renderBenchmarkChart() {
       `This run ${state.ber.toFixed(2)}%`));
   }
   host.replaceChildren(svg);
+}
+
+// Results page (design round 2): every number comes from REFERENCE / BENCHMARK_BY_SIZE / STICKER_RESULTS /
+// REAL_SEND above, which cite the Results log. Built with DOM APIs and textContent only.
+function renderResultsPage() {
+  const cell = (text, cls) => { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; return td; };
+  const methodCell = (m) => {
+    const td = document.createElement('td');
+    const span = document.createElement('span');
+    span.className = `method-cell ${m}-cell`;
+    span.textContent = methodInfo(m).short;
+    td.appendChild(span);
+    return td;
+  };
+  const ok = (v) => (v ? 'better-val' : 'worse-val');
+
+  document.getElementById('results-bench-rows').replaceChildren(...METHOD_ORDER.map(m => {
+    const r = REFERENCE[m];
+    const tr = document.createElement('tr');
+    tr.append(methodCell(m), cell(`${r.psnr.toFixed(2)} dB`), cell(r.ssim.toFixed(4)),
+      cell(`${r.ber.toFixed(2)}%`, ok(r.ber <= THRESHOLDS.ber)), cell(`${r.worst.toFixed(2)}%`),
+      cell(`${r.exact.toFixed(1)}%`));
+    return tr;
+  }));
+  document.getElementById('results-bench-note').textContent =
+    `${BENCH_ATTACKS.toLocaleString('en')} attacks per method: 100 DIV2K photos \u00d7 5 resize algorithms \u00d7 4 sizes ` +
+    '(384, 299, 256, 224 px). Default strengths (DCT T=50, DWT S=128). At equal image quality (about 35 dB), a stronger ' +
+    'DCT reaches about the same exact-message rate as the CNN (90.9% vs 88.9%); the CNN keeps the lower worst case and higher SSIM.';
+
+  document.getElementById('results-sticker-rows').replaceChildren(...METHOD_ORDER.map(m => {
+    const r = STICKER_RESULTS[m];
+    const tr = document.createElement('tr');
+    tr.append(methodCell(m), cell(`${r.survived} of ${STICKER_RESULTS.photos}`, ok(r.survived >= STICKER_RESULTS.photos * 0.9)),
+      cell(`${r.ber.toFixed(2)}%`), cell(REAL_SEND[m]));
+    return tr;
+  }));
+  document.getElementById('results-sticker-note').textContent =
+    `Prediction: ${STICKER_RESULTS.photos} Kodak test photos saved as WebP at quality 90, the setting measured from real ` +
+    'WhatsApp Web stickers (all three real stickers matched it exactly). Real send: one sticker per method through ' +
+    'WhatsApp Web; it shows the route works, not how often.';
+
+  const advice = [
+    ['Natural photos sent through AI pipelines (resizing)', 'CNN',
+      `Same behaviour for every resize algorithm; ${REFERENCE.cnn.exact}% exact vs ${REFERENCE.dct.exact}% (DCT) and ${REFERENCE.dwt.exact}% (DWT) at default settings.`],
+    ['Cartoon stickers or flat images on WhatsApp', 'DCT',
+      `${STICKER_RESULTS.dct.survived} of ${STICKER_RESULTS.photos} survived; its fine 8\u00d78 pattern stays invisible on flat backgrounds, where the CNN's colour blocks can show.`],
+    ['Photos sent as WhatsApp stickers', 'CNN or DCT',
+      `CNN ${STICKER_RESULTS.cnn.survived} of ${STICKER_RESULTS.photos}, DCT ${STICKER_RESULTS.dct.survived} of ${STICKER_RESULTS.photos}; DCT has more margin.`],
+    ['Image will never be changed (sent as a file)', 'LSB',
+      'Completely invisible, but any resize or compression destroys the message.'],
+  ];
+  document.getElementById('results-advice-rows').replaceChildren(...advice.map(([sit, best, why]) => {
+    const tr = document.createElement('tr');
+    tr.append(cell(sit), cell(best), cell(why));
+    return tr;
+  }));
+  renderBenchmarkChart('results-chart', false);
 }
 
 // UI-only setup: nothing here touches the server, auth or measured numbers.
@@ -1176,7 +1257,7 @@ function initPhase3Ui() {
 function renderSizeTable() {
   const row = (m) => `<tr><td><span class="method-cell ${m}-cell">${m.toUpperCase()}</span></td>` +
     BENCHMARK_BY_SIZE[m].map(v => `<td class="${v <= THRESHOLDS.ber ? 'better-val' : 'worse-val'}">${v.toFixed(2)}%</td>`).join('') + '</tr>';
-  document.getElementById('size-table-rows').innerHTML = row('cnn') + row('lsb') + row('dct') + row('dwt');
+  document.getElementById('size-table-rows').innerHTML = METHOD_ORDER.map(row).join('');
 }
 
 // Research summary for the run that just happened. The wording follows the MEASURED result
@@ -1216,6 +1297,7 @@ function updateAcademicSummaryParagraph() {
 // Initialize Application Events
 function initApp() {
   initReadFlow();
+  renderResultsPage();
   document.querySelectorAll('.bench-tab').forEach(b => b.addEventListener('click', () => setBenchTab(b.dataset.benchTab)));
 
   elements.navButtons.forEach(btn => {

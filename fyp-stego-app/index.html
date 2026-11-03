@@ -81,6 +81,15 @@
             </button>
           </li>
         </ol>
+        <p class="nav-heading mode-results">Results</p>
+        <ol class="step-list mode-results">
+          <li>
+            <button class="nav-btn" data-target="page-results">
+              <span class="step-num" aria-hidden="true"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></span>
+              <span class="step-text"><span class="step-label">Measured results</span><span class="step-caption">All four methods compared</span></span>
+            </button>
+          </li>
+        </ol>
         <p class="nav-heading mode-read">Read a message</p>
         <ol class="step-list mode-read">
           <li>
@@ -107,7 +116,7 @@
         <!-- Toggle Controls -->
         <div class="control-panel">
           <div class="toggle-group">
-            <span class="toggle-label">Academic Figures (Chapters)</span>
+            <span class="toggle-label">Show thesis figure captions</span>
             <label class="switch">
               <input type="checkbox" id="toggle-figures" aria-label="Show academic figure captions">
               <span class="slider"></span>
@@ -167,6 +176,82 @@
               <div class="card-body">
                 <p class="choice-desc">You received an image (for example a WhatsApp sticker or photo). Upload it and the app tries every decoder to find the hidden message. You do not need to know which method the sender used.</p>
                 <button type="button" class="btn btn-primary w-full" data-goto="page-read"><span>Read a hidden message</span></button>
+              </div>
+            </div>
+          </div>
+          <div class="control-card home-results">
+            <div class="card-body">
+              <p class="choice-desc"><strong>Measured results.</strong> Compare all four methods: resizing for AI pipelines, WhatsApp stickers, and which method to use when.</p>
+              <button type="button" class="btn btn-secondary" data-goto="page-results"><span>View results</span></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= RESULTS (design round 2) ================= -->
+        <section id="page-results" class="viewport">
+          <div class="results-stack">
+            <div class="panel-layout grid-2-columns">
+              <div class="control-card">
+                <div class="card-header">
+                  <div class="card-icon"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></div>
+                  <h3>Resizing (AI pipelines)</h3>
+                </div>
+                <div class="card-body">
+                  <div class="chart-container">
+                    <div class="chart-head">
+                      <span class="chart-title">Mean bit error rate by output size</span>
+                      <div class="chart-legend">
+                      <span class="legend-item"><span class="legend-color cnn"></span>CNN</span>
+                      <span class="legend-item"><span class="legend-color dct"></span>DCT</span>
+                      <span class="legend-item"><span class="legend-color dwt"></span>DWT</span>
+                      <span class="legend-item"><span class="legend-color lsb"></span>LSB</span>
+                        <span class="legend-item"><span class="legend-color target"></span>5% target</span>
+                      </div>
+                    </div>
+                    <div class="svg-chart-wrapper" id="results-chart"></div>
+                  </div>
+                  <div class="table-scroll">
+                    <table class="academic-table" aria-label="Benchmark summary per method">
+                      <thead><tr><th>Method</th><th>PSNR</th><th>SSIM</th><th>Mean BER</th><th>Worst BER</th><th>Exact message</th></tr></thead>
+                      <tbody id="results-bench-rows"></tbody>
+                    </table>
+                  </div>
+                  <p class="results-note" id="results-bench-note"></p>
+                </div>
+              </div>
+              <div class="control-card">
+                <div class="card-header">
+                  <div class="card-icon">
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <h3>WhatsApp stickers</h3>
+                </div>
+                <div class="card-body">
+                  <div class="table-scroll">
+                    <table class="academic-table" aria-label="WhatsApp sticker results per method">
+                      <thead><tr><th>Method</th><th>Survived (24 photos)</th><th>Mean BER</th><th>Real send</th></tr></thead>
+                      <tbody id="results-sticker-rows"></tbody>
+                    </table>
+                  </div>
+                  <p class="results-note" id="results-sticker-note"></p>
+                </div>
+              </div>
+            </div>
+            <div class="control-card">
+              <div class="card-header">
+                <div class="card-icon">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+                </div>
+                <h3>Which method when</h3>
+              </div>
+              <div class="card-body">
+                <div class="table-scroll">
+                  <table class="academic-table" aria-label="Which method to use">
+                    <thead><tr><th>Situation</th><th>Best method</th><th>Why (measured)</th></tr></thead>
+                    <tbody id="results-advice-rows"></tbody>
+                  </table>
+                </div>
+                <p class="results-note">All numbers are measured with the project&rsquo;s own tools (tools/benchmark_methods.py, tools/sticker_test.py) and recorded in the thesis Results log with dates and settings.</p>
               </div>
             </div>
           </div>
@@ -397,16 +482,14 @@
                 </div>
 
                 <!-- Process Status Console -->
-                <div class="status-console-card">
-                  <div class="console-header">
-                    <span class="console-title">Activity log</span>
-                  </div>
+                <details class="status-console-card log-details">
+                  <summary>Activity log</summary>
                   <div class="console-body" id="embedding-console" role="log" aria-live="polite" aria-label="Activity log">
                     <div class="log-line system">[SYSTEM] System initialized. Ready to load cover image.</div>
                     <div class="log-line info">[INFO] Sample photo 'Astronaut' loaded.</div>
                     <div class="log-line info">[INFO] Payload: 1,024 bits = up to 63 message bytes + 64 Reed-Solomon parity bytes.</div>
                   </div>
-                </div>
+                </details>
 
               </div>
             </div>
@@ -881,6 +964,8 @@
                     <span class="chart-title">Benchmark BER by output size</span>
                     <div class="chart-legend">
                       <span class="legend-item"><span class="legend-color cnn"></span>CNN</span>
+                      <span class="legend-item"><span class="legend-color dct"></span>DCT</span>
+                      <span class="legend-item"><span class="legend-color dwt"></span>DWT</span>
                       <span class="legend-item"><span class="legend-color lsb"></span>LSB</span>
                       <span class="legend-item"><span class="legend-color target"></span>5% target</span>
                       <span class="legend-item run-legend" id="run-legend" hidden><span class="legend-color run"></span>This run</span>

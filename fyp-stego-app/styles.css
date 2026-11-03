@@ -70,6 +70,8 @@ body.dark-theme {
 
   --cnn: var(--accent-text);
   --lsb: #9aa3b2;
+  --dct: #f2a65a;   /* 8.5:1 on --surface */
+  --dwt: #b794f6;   /* 7.1:1 */
 
   --canvas-bg: #07090d;
   --checker: #141822;
@@ -105,7 +107,9 @@ body.light-theme {
   --warning: #9a6200;
 
   --cnn: var(--accent-text);
-  --lsb: #6b7383;
+  --lsb: #5f6776;   /* was #6b7383 (4.36:1 on --surface-2); now >= 4.5:1 */
+  --dct: #b45309;   /* 4.6:1 */
+  --dwt: #6d3fd1;   /* 5.9:1 */
 
   --canvas-bg: #e9edf2;
   --checker: #dfe4eb;
@@ -866,9 +870,13 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .series-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .series-line.series-cnn { stroke: var(--cnn); }
 .series-line.series-lsb { stroke: var(--lsb); stroke-dasharray: 6 4; }
+.series-line.series-dct { stroke: var(--dct); stroke-dasharray: 12 4; }
+.series-line.series-dwt { stroke: var(--dwt); stroke-dasharray: 2 4; }
 .series-dot { stroke: var(--surface); stroke-width: 2; }
 .series-dot.series-cnn { fill: var(--cnn); }
 .series-dot.series-lsb { fill: var(--lsb); }
+.series-dot.series-dct { fill: var(--dct); }
+.series-dot.series-dwt { fill: var(--dwt); }
 .series-label { font-size: 9px; font-weight: 600; font-family: var(--font-sans); }
 .series-label.series-cnn { fill: var(--cnn); }
 .series-label.series-lsb { fill: var(--lsb); }
@@ -878,6 +886,8 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .legend-color { width: 16px; height: 3px; border-radius: 2px; }
 .legend-color.cnn { background: var(--cnn); }
 .legend-color.lsb { background: repeating-linear-gradient(90deg, var(--lsb) 0 5px, transparent 5px 8px); }
+.legend-color.dct { background: repeating-linear-gradient(90deg, var(--dct) 0 9px, transparent 9px 12px); }
+.legend-color.dwt { background: repeating-linear-gradient(90deg, var(--dwt) 0 2px, transparent 2px 5px); }
 .chart-note { margin-top: 0; }
 
 .table-container { display: flex; flex-direction: column; gap: var(--space-3); overflow-x: auto; }
@@ -901,6 +911,8 @@ body.dark-theme .method-diagram-preview { background: var(--canvas-bg); }
 .method-cell { font-weight: 600; }
 .cnn-cell { color: var(--cnn); }
 .lsb-cell { color: var(--lsb); }
+.dct-cell { color: var(--dct); }
+.dwt-cell { color: var(--dwt); }
 .better-val { color: var(--success); font-weight: 600; }
 .worse-val { color: var(--danger); font-weight: 600; }
 
@@ -1234,8 +1246,13 @@ body.hide-academic-figures .fig-num { display: none !important; }
 [hidden] { display: none !important; }
 body[data-mode="home"] .mode-hide,
 body[data-mode="home"] .mode-read,
+body[data-mode="home"] .mode-results,
 body[data-mode="read"] .mode-hide,
-body[data-mode="hide"] .mode-read { display: none; }
+body[data-mode="read"] .mode-results,
+body[data-mode="hide"] .mode-read,
+body[data-mode="hide"] .mode-results,
+body[data-mode="results"] .mode-hide,
+body[data-mode="results"] .mode-read { display: none; }
 
 .choice-desc { color: var(--text-2); font-size: var(--text-sm); line-height: 1.6; flex: 1; }
 
@@ -1270,3 +1287,20 @@ body[data-mode="hide"] .mode-read { display: none; }
   padding-bottom: var(--space-4);
   margin-bottom: calc(-1 * var(--space-4));
 }
+
+/* Design round 2 (3 Nov 2026) -------------------------------------------------------------- */
+.home-results { margin-top: var(--space-5); }
+.home-results .card-body { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-5); }
+.home-results .choice-desc { margin: 0; }
+.home-results .btn { flex: 0 0 auto; }
+.results-stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.results-note { font-size: var(--text-xs); color: var(--text-3); line-height: 1.5; }
+.log-details summary { cursor: pointer; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); font-weight: 600;
+  color: var(--text-2); background: var(--surface-2); list-style-position: inside; }
+.log-details[open] summary { border-bottom: 1px solid var(--border); }
+@media (max-width: 600px) {
+  .home-results .card-body { flex-direction: column; align-items: stretch; }
+}
+#results-bench-rows td:not(:first-child),
+#results-sticker-rows td:nth-child(2),
+#results-sticker-rows td:nth-child(3) { white-space: nowrap; }
