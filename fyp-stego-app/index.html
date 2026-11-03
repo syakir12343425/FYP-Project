@@ -33,30 +33,29 @@
   <!-- Main Grid Layout -->
   <div class="app-container">
 
-    <!-- NAVIGATION SIDEBAR -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo-icon" aria-hidden="true">
-          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg>
-        </div>
-        <div class="sidebar-title">
-          <p class="brand-name">RobustStego</p>
-          <span>Robust image steganography</span>
+    <!-- SITE HEADER (layout change 3 Nov 2026: top bar instead of a sidebar, online-tool style) -->
+    <header class="site-header">
+      <div class="site-header-inner">
+        <button type="button" class="brand" data-goto="page-home" aria-label="RobustStego, back to start">
+          <span class="logo-icon" aria-hidden="true"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16l3-3 2 2 3-4"/><path d="M15 7h2v2"/></svg></span>
+          <span class="brand-name">RobustStego</span>
+        </button>
+        <nav class="site-nav" aria-label="Main">
+          <button type="button" class="site-link" data-goto="page-embedding" data-mode-link="hide">Hide a message</button>
+          <button type="button" class="site-link" data-goto="page-read" data-mode-link="read">Read a message</button>
+          <button type="button" class="site-link" data-goto="page-results" data-mode-link="results">Results</button>
+        </nav>
+        <div class="site-tools">
+          <label class="switch theme-switch" title="Dark theme">
+            <input type="checkbox" id="toggle-theme" checked aria-label="Dark theme">
+            <span class="slider"></span>
+          </label>
+          <span class="site-user">Signed in as <strong id="current-user">-</strong></span>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Log out</button>
         </div>
       </div>
-
-      <nav class="sidebar-nav" aria-label="Workflow steps">
-        <!-- Two flows (3 Nov 2026): Hide a message (4 steps) or Read a hidden message (1 step).
-             body[data-mode] shows only the steps of the chosen flow; Start always returns to the choice. -->
-        <ol class="step-list">
-          <li>
-            <button class="nav-btn active" data-target="page-home" aria-current="step">
-              <span class="step-num" aria-hidden="true"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>
-              <span class="step-text"><span class="step-label">Start</span><span class="step-caption">Choose what to do</span></span>
-            </button>
-          </li>
-        </ol>
-        <p class="nav-heading mode-hide">Hide a message</p>
+      <!-- Hide flow steps: only shown while hiding a message -->
+      <nav class="stepper mode-hide" aria-label="Hide a message, steps">
         <ol class="step-list mode-hide">
           <li>
             <button class="nav-btn" data-target="page-embedding">
@@ -83,57 +82,8 @@
             </button>
           </li>
         </ol>
-        <p class="nav-heading mode-results">Results</p>
-        <ol class="step-list mode-results">
-          <li>
-            <button class="nav-btn" data-target="page-results">
-              <span class="step-num" aria-hidden="true"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></span>
-              <span class="step-text"><span class="step-label">Measured results</span><span class="step-caption">All four methods compared</span></span>
-            </button>
-          </li>
-        </ol>
-        <p class="nav-heading mode-read">Read a message</p>
-        <ol class="step-list mode-read">
-          <li>
-            <button class="nav-btn" data-target="page-read">
-              <span class="step-num" aria-hidden="true"><span class="step-digit">1</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
-              <span class="step-text"><span class="step-label">Read hidden message</span><span class="step-caption">Upload an image, see the message</span></span>
-            </button>
-          </li>
-        </ol>
       </nav>
-
-      <div class="sidebar-footer">
-        <div class="academic-meta">
-          <p class="meta-label">UNIVERSITY FINAL YEAR PROJECT</p>
-          <p class="author-name">B.Sc. Cybersecurity Thesis</p>
-          <p class="supervisor">Supervisor: Dr. Syaril Nizam Omar</p>
-        </div>
-        
-        <div class="session-box">
-          <span>Signed in as <strong id="current-user">-</strong></span>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Log out</button>
-        </div>
-
-        <!-- Toggle Controls -->
-        <div class="control-panel">
-          <div class="toggle-group">
-            <span class="toggle-label">Show thesis figure captions</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-figures" aria-label="Show academic figure captions">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="toggle-group">
-            <span class="toggle-label">Dark Theme</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-theme" checked aria-label="Dark theme">
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </aside>
+    </header>
 
     <!-- MAIN DASHBOARD CONTENT -->
     <main class="main-content" id="main-content" tabindex="-1">
@@ -155,38 +105,41 @@
         <!-- ================= PAGE 1: HOME / EMBEDDING MODULE ================= -->
         <!-- ================= START: choose a flow ================= -->
         <section id="page-home" class="viewport active">
-          <div class="panel-layout grid-2-columns">
-            <div class="control-card">
-              <div class="card-header">
-                <div class="card-icon">
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                </div>
-                <h3>Hide a message</h3>
-              </div>
-              <div class="card-body">
-                <p class="choice-desc">Hide a short text message (up to 63 bytes) inside a 512&times;512 image, then download the image to send it. You can also test whether the message survives resizing.</p>
-                <button type="button" class="btn btn-primary w-full" data-goto="page-embedding"><span>Hide a message</span></button>
-              </div>
+          <div class="home-tool">
+            <h2 class="home-title">Hide a message in a photo.<br>Read it back after resizing.</h2>
+            <p class="home-sub">Hidden text that is built to survive downscaling in AI pipelines, tested against resizing, JPEG and WhatsApp stickers.</p>
+
+            <div class="home-tabs" role="tablist" aria-label="What do you want to do?">
+              <button type="button" role="tab" id="home-tab-hide" class="home-tab" aria-selected="true" aria-controls="home-panel" data-home-tab="hide">Hide a message</button>
+              <button type="button" role="tab" id="home-tab-read" class="home-tab" aria-selected="false" aria-controls="home-panel" data-home-tab="read" tabindex="-1">Read a message</button>
             </div>
-            <div class="control-card">
-              <div class="card-header">
-                <div class="card-icon">
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
-                </div>
-                <h3>Read a hidden message</h3>
+
+            <div id="home-panel" role="tabpanel" aria-labelledby="home-tab-hide" class="home-panel" data-tab="hide">
+              <div class="dropzone" id="home-dropzone">
+                <svg class="dropzone-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <p class="dropzone-title" id="home-drop-title">Drop a photo to hide a message in</p>
+                <p class="dropzone-sub" id="home-drop-sub">PNG, JPEG or WebP, up to 4 MB. It is resized to 512 &times; 512 px.</p>
+                <button type="button" class="btn btn-primary" id="home-browse">Choose a photo</button>
+                <input type="file" id="home-file-input" accept="image/png,image/jpeg,image/webp" hidden>
+                <p class="dropzone-error" id="home-error" role="alert"></p>
               </div>
-              <div class="card-body">
-                <p class="choice-desc">You received an image (for example a WhatsApp sticker or photo). Upload it and the app tries every decoder to find the hidden message. You do not need to know which method the sender used.</p>
-                <button type="button" class="btn btn-primary w-full" data-goto="page-read"><span>Read a hidden message</span></button>
+              <div class="home-samples" id="home-samples">
+                <span>No photo? Try a sample:</span>
+                <button type="button" class="home-sample" data-sample="astronaut" aria-label="Use the astronaut sample photo"><img src="assets/samples/astronaut.jpg" alt="" width="56" height="56"></button>
+                <button type="button" class="home-sample" data-sample="coffee" aria-label="Use the coffee sample photo"><img src="assets/samples/coffee.jpg" alt="" width="56" height="56"></button>
+                <button type="button" class="home-sample" data-sample="cat" aria-label="Use the cat sample photo"><img src="assets/samples/cat.jpg" alt="" width="56" height="56"></button>
+                <button type="button" class="home-sample" data-sample="rocket" aria-label="Use the rocket sample photo"><img src="assets/samples/rocket.jpg" alt="" width="56" height="56"></button>
               </div>
-            </div>
-          </div>
-          <div class="control-card home-results">
-            <div class="card-body">
-              <p class="choice-desc"><strong>Measured results.</strong> Compare all four methods: resizing for AI pipelines, WhatsApp stickers, and which method to use when.</p>
-              <button type="button" class="btn btn-secondary" data-goto="page-results"><span>View results</span></button>
+              <p class="home-read-note" id="home-read-note">The app tries all four decoders, so you do not need to know which method the sender used.</p>
             </div>
           </div>
+
+          <ol class="home-steps">
+            <li><strong>Hide</strong><span>Type a message of up to 63 bytes and choose a method: the CNN, DCT, DWT or LSB.</span></li>
+            <li><strong>Send or resize</strong><span>Download the image and send it, or test it by shrinking it from 512 px to as small as 224 px.</span></li>
+            <li><strong>Read back</strong><span>Upload the image you received. Error correction repairs damaged bytes, or the app says the message is lost.</span></li>
+          </ol>
+          <p class="home-results-link"><button type="button" class="link-btn" data-goto="page-results">See how the four methods compare in measured tests</button></p>
         </section>
 
         <!-- ================= RESULTS (design round 2) ================= -->
@@ -261,33 +214,32 @@
 
         <!-- ================= READ: upload -> message ================= -->
         <section id="page-read" class="viewport">
-          <div class="panel-layout grid-2-columns">
-            <div class="control-card">
-              <div class="card-header">
-                <div class="card-icon">
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+          <!-- Layout (3 Nov 2026): the image large on the left, the answer on the right. -->
+          <div class="read-layout">
+            <div class="control-card read-image-card">
+              <div class="read-drop" id="read-drop" data-has-image="false">
+                <img id="read-preview" alt="The image you uploaded" hidden>
+                <canvas id="read-mini-canvas" width="64" height="64" aria-hidden="true" hidden></canvas>
+                <div class="read-drop-empty">
+                  <svg class="dropzone-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  <p class="dropzone-title">Drop the image you received</p>
+                  <p class="dropzone-sub">PNG, JPEG or WebP, up to 4 MB</p>
                 </div>
-                <h3>Read a hidden message</h3>
               </div>
-              <div class="card-body">
-                <div class="stego-input-status">
-                  <div class="mini-preview-wrap">
-                    <canvas id="read-mini-canvas" width="64" height="64" aria-hidden="true"></canvas>
-                    <span id="read-import-status">No image yet. Upload the image you received (PNG, JPEG or WebP).</span>
-                  </div>
-                  <button type="button" class="btn btn-secondary btn-sm" id="btn-read-upload">Upload image</button>
-                  <input type="file" id="read-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
-                </div>
+              <div class="stego-input-status read-status">
+                <span id="read-import-status">No image yet.</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-read-upload">Upload image</button>
+                <input type="file" id="read-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+              </div>
+            </div>
 
-                <div class="form-actions-bar">
-                  <button type="button" id="btn-read-extract" class="btn btn-primary w-full" disabled>
-                    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
-                    <span>Read hidden message</span>
-                  </button>
-                </div>
-
-                <!-- The answer comes first. Built with textContent only: recovered text is untrusted. -->
-                <div class="ber-hero message-hero" id="read-hero" data-state="idle" aria-live="polite">
+            <div class="read-side">
+              <button type="button" id="btn-read-extract" class="btn btn-primary w-full btn-lg" disabled>
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                <span>Read hidden message</span>
+              </button>
+              <!-- The answer. Built with textContent only: recovered text is untrusted. -->
+              <div class="ber-hero message-hero" id="read-hero" data-state="idle" aria-live="polite">
                   <div class="ber-hero-main">
                     <span class="m-label" id="read-hero-label">Hidden message</span>
                     <span class="found-message" id="read-message">Upload an image and press Read.</span>
@@ -297,17 +249,7 @@
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-read-copy" hidden>Copy message</button>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div class="control-card">
-              <div class="card-header">
-                <div class="card-icon">
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
-                </div>
-                <h3>Technical details</h3>
-              </div>
-              <div class="card-body">
+              <div class="control-card read-details-card">
                 <details class="tech-details" id="read-details">
                   <summary>Decoder, error correction and bit error rate</summary>
                   <div class="tech-details-body">
@@ -1040,6 +982,16 @@
 
       </div>
 
+      <footer class="site-footer">
+        <p>Robust Deep Image Steganography Against Downscaling Operations in AI Pipelines. Final year project by Muhammad Syakir, B.Sc. Cybersecurity, supervised by Dr. Syaril Nizam Omar.</p>
+        <div class="toggle-group">
+          <label class="toggle-label" for="toggle-figures">Show thesis figure numbers</label>
+          <label class="switch">
+            <input type="checkbox" id="toggle-figures">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </footer>
     </main>
   </div>
 

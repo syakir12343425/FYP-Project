@@ -373,20 +373,26 @@ const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 're
 
 function handleNavigation(targetId) {
   document.body.dataset.mode = pageMode(targetId);
+  const mode = pageMode(targetId);
+  // Page heading: hide steps take the step label from the stepper; the other pages have fixed names.
+  const stepBtn = document.querySelector(`.nav-btn[data-target="${targetId}"] .step-label`);
+  document.getElementById('topbar-heading').textContent =
+    mode === 'home' ? 'Hide or read a message'
+      : mode === 'read' ? 'Read a hidden message'
+      : mode === 'results' ? 'Measured results'
+      : (stepBtn ? stepBtn.textContent : '');
+  document.getElementById('topbar-step').textContent =
+    mode === 'home' ? 'Start'
+      : mode === 'read' ? 'Read a message'
+      : mode === 'results' ? 'Results'
+      : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
+  document.querySelectorAll('.site-link').forEach(l => {
+    if (l.dataset.modeLink === mode) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');
+  });
   elements.navButtons.forEach(btn => {
     if (btn.getAttribute('data-target') === targetId) {
       btn.classList.add('active');
       btn.setAttribute('aria-current', 'step');
-      // Top bar mirrors the active step (label text comes from the nav itself).
-      const label = btn.querySelector('.step-label');
-      const mode = pageMode(targetId);
-      document.getElementById('topbar-heading').textContent =
-        mode === 'home' ? 'What do you want to do?' : (label ? label.textContent : '');
-      document.getElementById('topbar-step').textContent =
-        mode === 'home' ? 'Start'
-          : mode === 'read' ? 'Read a message'
-          : mode === 'results' ? 'Results'
-          : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
     } else {
       btn.classList.remove('active');
       btn.removeAttribute('aria-current');
@@ -404,6 +410,7 @@ function handleNavigation(targetId) {
   // Move focus to the new page heading so keyboard and screen-reader users land on the new content.
   const heading = document.getElementById('topbar-heading');
   if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: true }); }
+  window.scrollTo(0, 0);
 }
 
 // Tick completed workflow steps in the sidebar. Purely visual: derived from existing state,
@@ -1003,7 +1010,10 @@ function initReadFlow() {
       const img = new Image();
       img.onload = () => drawMini(document.getElementById('read-mini-canvas'), img);
       img.src = dataUrl;
-      document.getElementById('read-import-status').textContent = `Image loaded (${w}x${h}px). Ready.`;
+      const preview = document.getElementById('read-preview');
+      preview.src = dataUrl; preview.hidden = false;
+      document.getElementById('read-drop').dataset.hasImage = 'true';
+      document.getElementById('read-import-status').textContent = `Image loaded, ${w} \u00d7 ${h} px.`;
       document.getElementById('btn-read-extract').disabled = false;
       document.getElementById('btn-read-check').disabled = true;
       document.getElementById('read-ber-result').textContent = '';
@@ -1012,6 +1022,18 @@ function initReadFlow() {
       writeLog(`[INFO] Read: image uploaded (${w}x${h}px).`, 'info');
       clearInlineError(document.querySelector('#page-read .stego-input-status'));
     } catch (err) { showInlineError(document.querySelector('#page-read .stego-input-status'), `${err.message} Choose another file.`); }
+  });
+  // Drag and drop onto the large image area: handed to the same file input, so the same checks apply.
+  const drop = document.getElementById('read-drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('dragging'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove('dragging')));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    const dt = new DataTransfer(); dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
   });
   document.getElementById('btn-read-extract').addEventListener('click', runReadExtraction);
   document.getElementById('btn-read-check').addEventListener('click', runReadBerCheck);
@@ -1335,8 +1357,77 @@ function updateAcademicSummaryParagraph() {
 }
 
 // Initialize Application Events
+// Start page, online-tool style (3 Nov 2026): choose Hide or Read, then drop a photo.
+// The file is handed to the existing upload inputs, so validation and processing stay in one place.
+function initHomeTool() {
+  const panel = document.getElementById('home-panel');
+  const tabs = [...document.querySelectorAll('.home-tab')];
+  const input = document.getElementById('home-file-input');
+  const zone = document.getElementById('home-dropzone');
+  const err = document.getElementById('home-error');
+  const TEXT = {
+    hide: ['Drop a photo to hide a message in', 'PNG, JPEG or WebP, up to 4 MB. It is resized to 512 \u00d7 512 px.', 'Choose a photo'],
+    read: ['Drop the image you received', 'PNG, JPEG or WebP, up to 4 MB, for example a saved WhatsApp sticker.', 'Choose an image'],
+  };
+  const setTab = (name, focus = false) => {
+    tabs.forEach(t => {
+      const on = t.dataset.homeTab === name;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      if (on) { panel.setAttribute('aria-labelledby', t.id); if (focus) t.focus(); }
+    });
+    panel.dataset.tab = name;
+    const [title, sub, btn] = TEXT[name];
+    document.getElementById('home-drop-title').textContent = title;
+    document.getElementById('home-drop-sub').textContent = sub;
+    document.getElementById('home-browse').textContent = btn;
+    err.textContent = '';
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => setTab(t.dataset.homeTab));
+    t.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      setTab(tabs[(i + 1) % tabs.length].dataset.homeTab, true);
+    });
+  });
+
+  const handOff = async (file) => {
+    err.textContent = '';
+    try { await readImageFile(file); } catch (e) { err.textContent = e.message; return; }
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    if (panel.dataset.tab === 'hide') {
+      handleNavigation('page-embedding');
+      elements.coverFileInput.files = dt.files;
+      elements.coverFileInput.dispatchEvent(new Event('change'));
+    } else {
+      handleNavigation('page-read');
+      const readInput = document.getElementById('read-file-input');
+      readInput.files = dt.files;
+      readInput.dispatchEvent(new Event('change'));
+      // Read straight away once the image has loaded: drop and go.
+      const btn = document.getElementById('btn-read-extract');
+      for (let i = 0; i < 40 && btn.disabled; i++) await new Promise(r => setTimeout(r, 50));
+      if (!btn.disabled) btn.click();
+    }
+  };
+  document.getElementById('home-browse').addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) handOff(f); });
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('dragging'); }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, () => zone.classList.remove('dragging')));
+  zone.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handOff(f); });
+
+  document.querySelectorAll('.home-sample').forEach(b => b.addEventListener('click', () => {
+    handleNavigation('page-embedding');
+    const target = document.querySelector(`.sample-thumb-btn[data-sample="${b.dataset.sample}"]`);
+    if (target) target.click();
+  }));
+}
+
 function initApp() {
   initReadFlow();
+  initHomeTool();
   renderResultsPage();
   document.querySelectorAll('.bench-tab').forEach(b => b.addEventListener('click', () => setBenchTab(b.dataset.benchTab)));
 
