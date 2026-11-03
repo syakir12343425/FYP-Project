@@ -71,13 +71,13 @@
           <li>
             <button class="nav-btn" data-target="page-downscaling">
               <span class="step-num" aria-hidden="true"><span class="step-digit">3</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
-              <span class="step-text"><span class="step-label">Downscaling attack</span><span class="step-caption">Resize the stego image</span></span>
+              <span class="step-text"><span class="step-label">Downscaling attack</span><span class="step-caption">Optional: test against resizing</span></span>
             </button>
           </li>
           <li>
             <button class="nav-btn" data-target="page-extraction">
               <span class="step-num" aria-hidden="true"><span class="step-digit">4</span><svg aria-hidden="true" focusable="false" class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="5 12 10 17 19 7"/></svg></span>
-              <span class="step-text"><span class="step-label">Extract &amp; evaluate</span><span class="step-caption">Recover and measure BER</span></span>
+              <span class="step-text"><span class="step-label">Extract &amp; evaluate</span><span class="step-caption">Optional: recover and measure BER</span></span>
             </button>
           </li>
         </ol>
@@ -338,7 +338,7 @@
                       <input type="radio" name="embedding-method" value="dct">
                       <div class="method-content">
                         <span class="method-title">DCT (Classical)</span>
-                        <span class="method-desc">Orders two mid-frequency DCT coefficients in an 8&times;8 block per bit. About 41 dB PSNR.</span>
+                        <span class="method-desc">Orders two mid-frequency DCT coefficients in an 8&times;8 block per bit. About 40 dB PSNR.</span>
                         <span class="method-tag tag-std">Frequency domain</span>
                       </div>
                     </label>
@@ -351,6 +351,7 @@
                       </div>
                     </label>
                   </div>
+                  <p class="flat-tip" id="flat-tip" role="status" hidden></p>
                 </div>
 
                 <!-- Action Buttons -->
@@ -522,7 +523,8 @@
 
               <!-- Action Card -->
               <div class="actions-card">
-                <button id="btn-download-stego" class="btn btn-secondary w-full">
+                <p class="field-note next-step-note">Your message is hidden in this image. Download it to send it. Testing it against resizing is optional.</p>
+                <button id="btn-download-stego" class="btn btn-primary w-full">
                   <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
@@ -530,8 +532,8 @@
                   </svg>
                   <span>Download stego image</span>
                 </button>
-                <button id="btn-go-to-downscaling" class="btn btn-primary w-full">
-                  <span>Continue to downscaling attack</span>
+                <button id="btn-go-to-downscaling" class="btn btn-secondary w-full">
+                  <span>Optional: test against resizing</span>
                   <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="5" y1="12" x2="19" y2="12" />
                     <polyline points="12 5 19 12 12 19" />

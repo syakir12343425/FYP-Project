@@ -1258,3 +1258,8 @@ body[data-mode="hide"] .mode-read { display: none; }
 .tech-details summary { cursor: pointer; font-weight: 600; color: var(--text-2); font-size: var(--text-sm); }
 .tech-details[open] summary { margin-bottom: var(--space-4); }
 .tech-details-body { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* Phase 2 (3 Nov 2026): flat-area tip under the method cards; the "what next" note on the review page. */
+.flat-tip { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: 8px;
+  font-size: var(--text-xs); color: var(--text-2); line-height: 1.5; }
+.next-step-note { margin-top: 0; }

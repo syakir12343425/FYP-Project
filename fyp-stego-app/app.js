@@ -880,6 +880,17 @@ async function runExtractionAndEvaluation() {
     renderBenchmarkChart();
     if (berKnown) {
       updateAcademicSummaryParagraph();
+    } else {
+      // Blind extraction: no BER without the original message, but say what the decoder found.
+      const dec = `the ${methodInfo(state.method).long} decoder`;
+      elements.evaluationSummaryText.textContent = !state.ecc
+        ? `Extracted with ${dec}. Enter the expected message to measure the bit error rate.`
+        : state.ecc.ok
+          ? `A hidden message was recovered with ${dec}` +
+            (state.ecc.corrected > 0 ? `; Reed-Solomon error correction repaired ${state.ecc.corrected} of 128 bytes. ` : '. ') +
+            'Enter the expected message to measure the bit error rate.'
+          : `No valid message was recovered with ${dec}: more than 32 of 128 bytes were damaged, or the image ` +
+            'was made with a different method. Try another decoder, or use Read a hidden message, which tries all four.';
     }
 
     writeLog(`[SUCCESS] Extraction complete via server. BER: ${berKnown ? state.ber.toFixed(2) + '%' : 'n/a'}`, "success");
@@ -890,6 +901,52 @@ async function runExtractionAndEvaluation() {
   } finally {
     elements.btnExtractMessage.disabled = false;
     setBtnLabel(elements.btnExtractMessage, "Extract hidden message");
+  }
+}
+
+// ------------------------------------------------------------------ flat-area tip (3 Nov 2026)
+// The CNN changes every 16x16 block (32x32 message grid), so on large flat areas its colour pattern can be
+// seen; DCT's fine 8x8 brightness texture is much less visible there (Results log 9c-2). Heuristic, calibrated
+// on 16 images: share of 16x16 blocks whose brightness std is below 2.5 (0-255). Cartoon stickers scored
+// 33-52%, ordinary photos 1-18% (sky/plain-background photos such as rocket 71%, moon 52% also trigger).
+const FLAT_BLOCK_STD = 2.5;
+const FLAT_SHARE_TIP = 0.30;
+
+function flatBlockShare(canvas) {
+  const { width: w, height: h } = canvas;
+  const data = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const B = 16;
+  let flat = 0, total = 0;
+  for (let by = 0; by + B <= h; by += B) {
+    for (let bx = 0; bx + B <= w; bx += B) {
+      let s = 0, s2 = 0;
+      for (let y = by; y < by + B; y++) {
+        for (let x = bx; x < bx + B; x++) {
+          const i = (y * w + x) * 4;
+          const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          s += lum; s2 += lum * lum;
+        }
+      }
+      const n = B * B, mean = s / n;
+      if (Math.sqrt(Math.max(0, s2 / n - mean * mean)) < FLAT_BLOCK_STD) flat++;
+      total++;
+    }
+  }
+  return total ? flat / total : 0;
+}
+
+function updateFlatTip() {
+  const tip = document.getElementById('flat-tip');
+  if (!tip) return;
+  let share = 0;
+  try { share = flatBlockShare(elements.coverCanvas); } catch (_) { tip.hidden = true; return; }
+  if (share >= FLAT_SHARE_TIP && state.method === 'cnn') {
+    tip.textContent = `Tip: about ${Math.round(share * 100)}% of this image is flat (plain background or large single-colour areas). ` +
+      'The CNN changes every part of the image, so its faint colour pattern may be visible here. ' +
+      'DCT usually hides better on images like this (for example cartoon stickers).';
+    tip.hidden = false;
+  } else {
+    tip.hidden = true;
   }
 }
 
@@ -1328,6 +1385,7 @@ function initApp() {
       state.coverLoaded = true;
 
       drawProceduralImage(elements.coverCanvas, sampleType);
+      updateFlatTip();
       writeLog(`[INFO] Sample '${SAMPLE_NAMES[sampleType] || sampleType}' loaded (synthetic drawing).`, "info");
     });
   });
@@ -1342,6 +1400,7 @@ function initApp() {
       radio.checked = true;
       state.method = radio.value;
       updateStepProgress();
+      updateFlatTip();
       writeLog(`[INFO] Active steganography algorithm changed to: ${state.method.toUpperCase()}`, "info");
     });
   });
@@ -1367,6 +1426,7 @@ function initApp() {
         ctx.drawImage(img, 0, 0, 512, 512);
         state.coverLoaded = true;
         state.coverScene = 'Uploaded File';
+        updateFlatTip();
         writeLog(`[INFO] Custom cover image '${file.name}' loaded successfully into workspace memory.`, "info");
       };
       img.src = event.target.result;
@@ -1569,6 +1629,7 @@ function initApp() {
   });
 
   drawProceduralImage(elements.coverCanvas, 'lena');
+  updateFlatTip();
   updatePayloadMetrics();
   updateThreatVectorInfo();
   updateStepProgress();
