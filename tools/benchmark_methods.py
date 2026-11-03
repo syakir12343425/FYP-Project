@@ -105,7 +105,8 @@ def methods(args):
         "dwt": (lambda c, b: cs.dwt_embed(c, b, args.dwt_step), lambda img: cs.dwt_extract(img, args.dwt_step)),
     }
     if "cnn" in args.methods:
-        cnn = CNN(args.checkpoint, args.cnn_scale, args.cnn_luma)
+        # getattr: cross_matrix.py and sticker_test.py share this function but do not define these options
+        cnn = CNN(args.checkpoint, getattr(args, "cnn_scale", None), getattr(args, "cnn_luma", False))
         m["cnn"] = (cnn.embed, cnn.extract)
     return {k: v for k, v in m.items() if k in args.methods}
 
