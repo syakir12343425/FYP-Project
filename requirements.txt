@@ -7,3 +7,4 @@ matplotlib
 pyyaml
 tqdm
 pytorch-msssim
+scikit-learn  # tools/steganalysis.py (trained detector)
