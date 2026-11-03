@@ -28,14 +28,23 @@ MUST_WORK = [
     ("revoke a refresh token",         "update refresh_tokens set revoked = true where id = -1"),
     ("read revoked families",          "select count(*) from revoked_families"),
     ("write an audit event",           "insert into audit_log (ts, event) values (now(), 'priv_test') returning id"),
+    # v3, multi-user accounts (always rolled back, so nothing is created)
+    ("create a normal user",           "insert into admin_users (username, password_hash, role, failed_attempts, created_at) "
+                                       "values ('priv_test_user', 'x', 'user', 0, now()) returning id"),
+    ("set a normal user's password",   "update admin_users set password_hash = 'x', must_change_password = true where role = 'user'"),
+    ("disable a normal user",          "update admin_users set disabled = true where role = 'user'"),
 ]
 
 MUST_FAIL = [
     ("read audit log contents",        "select event, username, ip from audit_log limit 1"),
     ("edit an audit event",            "update audit_log set detail = 'tampered' where id = -1"),
     ("delete audit events",            "delete from audit_log where id = -1"),
-    ("create a new admin",             "insert into admin_users (username, password_hash, failed_attempts) values ('evil', 'x', 0)"),
-    ("change an admin password hash",  "update admin_users set password_hash = 'x' where id = -1"),
+    ("create a new admin",             "insert into admin_users (username, password_hash, role, failed_attempts, created_at) "
+                                       "values ('evil', 'x', 'admin', 0, now())"),
+    ("change an admin password hash",  "update admin_users set password_hash = 'x' where role = 'admin'"),
+    ("disable the admin",              "update admin_users set disabled = true where role = 'admin'"),
+    ("promote a user to admin",        "update admin_users set role = 'admin' where role = 'user'"),
+    ("rename an account",              "update admin_users set username = 'evil' where id = -1"),
     ("delete admin accounts",          "delete from admin_users where id = -1"),
     ("delete refresh tokens",          "delete from refresh_tokens where id = -1"),
     ("un-revoke a token family",       "delete from revoked_families where family_id = 'x'"),

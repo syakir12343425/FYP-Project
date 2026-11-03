@@ -1,4 +1,4 @@
-"""/api/auth/*  — login, refresh (rotating, reuse-detecting), logout, me."""
+"""/api/auth/*  — login, refresh (rotating, reuse-detecting), logout, me, change-password."""
 import uuid
 from datetime import timedelta
 
@@ -13,9 +13,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 import config
-from db import AdminUser, RefreshToken, RevokedFamily, audit, aware, get_db, utcnow
-from security import (DUMMY_HASH, create_access_token, decode_access_token, hash_refresh_token,
-                      new_refresh_token, verify_password)
+from db import AdminUser, RefreshToken, RevokedFamily, User, audit, aware, get_db, utcnow
+from security import (DUMMY_HASH, create_access_token, decode_access_token, hash_password,
+                      hash_refresh_token, new_refresh_token, password_problem, verify_password)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -26,6 +26,19 @@ COOKIE = "refresh_token"
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=128)
+
+
+def session_body(user: User) -> dict:
+    """What login / refresh / change-password return. Role and the must-change flag are for the UI only;
+    the server re-checks both from the database on every request."""
+    return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
+            "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username,
+            "role": user.role, "must_change_password": user.must_change_password}
 
 
 def _csrf_guard(request: Request):
@@ -65,6 +78,14 @@ def _kill_family(db: Session, family_id: str, reason: str):
             db.rollback()
 
 
+def kill_user_sessions(db: Session, user_id: int, reason: str):
+    """Log a user out everywhere: kill every refresh-token family they have. Their current 15-minute
+    access token stops working too, because require_user re-reads the account on every request."""
+    families = db.scalars(select(RefreshToken.family_id).where(RefreshToken.user_id == user_id).distinct()).all()
+    for fam in families:
+        _kill_family(db, fam, reason)
+
+
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, body: LoginRequest, response: Response, db: Session = Depends(get_db)):
@@ -89,12 +110,17 @@ def login(request: Request, body: LoginRequest, response: Response, db: Session 
         audit(db, "login_failed", request, body.username[:64])
         raise HTTPException(401, "Invalid credentials or account temporarily locked")   # generic message
 
-    user.failed_attempts, user.locked_until = 0, None
+    if user.disabled:
+        # Checked only AFTER a correct password, with the same generic answer, so it reveals nothing
+        # to someone guessing passwords.
+        audit(db, "login_blocked_disabled", request, user.username)
+        raise HTTPException(401, "Invalid credentials or account temporarily locked")
+
+    user.failed_attempts, user.locked_until, user.last_login_at = 0, None, now
     db.commit()
     _issue_refresh(db, user, str(uuid.uuid4()), response)
     audit(db, "login_success", request, user.username)
-    return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
-            "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username}
+    return session_body(user)
 
 
 @router.post("/refresh")
@@ -118,8 +144,8 @@ def refresh(request: Request, response: Response, refresh_token: str | None = Co
         raise HTTPException(401, "Session revoked")
     if aware(rec.expires_at) < utcnow():
         raise HTTPException(401, "Session expired")
-    user = db.get(AdminUser, rec.user_id)
-    if user is None:
+    user = db.get(User, rec.user_id)
+    if user is None or user.disabled:
         raise HTTPException(401, "Invalid session")
     # Rotate: the old token is single-use. Claim it ATOMICALLY in the database: only the request
     # whose UPDATE flips revoked False->True wins. A plain read-then-write ("if not rec.revoked:
@@ -138,8 +164,7 @@ def refresh(request: Request, response: Response, refresh_token: str | None = Co
         raise HTTPException(401, "Session revoked")
     _issue_refresh(db, user, rec.family_id, response)
     audit(db, "token_refreshed", request, user.username)
-    return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
-            "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username}
+    return session_body(user)
 
 
 @router.post("/logout")
@@ -155,22 +180,60 @@ def logout(request: Request, response: Response, refresh_token: str | None = Coo
     return {"ok": True}
 
 
-def require_user(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer),
-                 db: Session = Depends(get_db)) -> AdminUser:
-    """Dependency guarding every protected endpoint."""
+def require_session_user(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+                         db: Session = Depends(get_db)) -> User:
+    """Valid token for an enabled account. Allows accounts that still must change their password, so only
+    use it for /me and /change-password."""
     if creds is None:
         raise HTTPException(401, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
     try:
         data = decode_access_token(creds.credentials)
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    user = db.get(AdminUser, int(data["sub"]))
-    if user is None:
+    user = db.get(User, int(data["sub"]))
+    if user is None or user.disabled:          # disabling takes effect at once, not after 15 minutes
         raise HTTPException(401, "Invalid token")
     request.state.username = user.username
     return user
 
 
+def require_user(user: User = Depends(require_session_user)) -> User:
+    """Dependency guarding every protected endpoint."""
+    if user.must_change_password:
+        raise HTTPException(403, "Password change required")
+    return user
+
+
+def require_admin(user: User = Depends(require_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(403, "Admins only")
+    return user
+
+
 @router.get("/me")
-def me(user: AdminUser = Depends(require_user)):
-    return {"username": user.username}
+def me(user: User = Depends(require_session_user)):
+    return {"username": user.username, "role": user.role, "must_change_password": user.must_change_password}
+
+
+@router.post("/change-password")
+@limiter.limit("5/minute")
+def change_password(request: Request, body: ChangePasswordRequest, response: Response,
+                    user: User = Depends(require_session_user), db: Session = Depends(get_db)):
+    _csrf_guard(request)
+    if user.role == "admin":
+        # The database refuses this for the app's role anyway (trigger in supabase_hardening.sql).
+        raise HTTPException(403, "Admin passwords are changed with create_admin.py")
+    if not verify_password(body.current_password, user.password_hash):
+        audit(db, "password_change_failed", request, user.username)
+        raise HTTPException(400, "Current password is wrong")
+    problem = password_problem(body.new_password, user.username)
+    if problem:
+        raise HTTPException(400, problem)
+    if verify_password(body.new_password, user.password_hash):
+        raise HTTPException(400, "Choose a password different from the current one")
+    user.password_hash, user.must_change_password = hash_password(body.new_password), False
+    db.commit()
+    kill_user_sessions(db, user.id, "password_change")     # every other device is logged out
+    _issue_refresh(db, user, str(uuid.uuid4()), response)  # this device continues with a fresh session
+    audit(db, "password_changed", request, user.username)
+    return session_body(user)

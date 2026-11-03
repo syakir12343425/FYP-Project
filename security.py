@@ -1,6 +1,8 @@
 """Password hashing, JWT access tokens, opaque refresh tokens."""
 import hashlib
+import re
 import secrets
+import string
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -45,3 +47,33 @@ def new_refresh_token() -> tuple[str, str]:
 
 def hash_refresh_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()   # DB leak does not yield usable tokens
+
+
+def password_problem(pw: str, username: str = "") -> str | None:
+    """The one password policy (create_admin.py, change-password). None = acceptable."""
+    if len(pw) < config.MIN_PASSWORD_LEN:
+        return f"Use at least {config.MIN_PASSWORD_LEN} characters."
+    if len(pw.encode()) > 72:
+        return "Use at most 72 bytes (bcrypt ignores anything longer)."
+    if not (re.search(r"[a-z]", pw) and re.search(r"[A-Z]", pw) and re.search(r"\d", pw) and re.search(r"[^\w\s]", pw)):
+        return "Mix upper case, lower case, a digit and a symbol."
+    if username and username.lower() in pw.lower():
+        return "Do not put your username in the password."
+    return None
+
+
+_TEMP_ALPHABET = "".join(c for c in string.ascii_letters + string.digits if c not in "Il1O0o")
+_TEMP_SYMBOLS = "-_!?#%+="
+
+
+def temporary_password(length: int = 16) -> str:
+    """Random one-time password an admin hands to a user. Meets password_problem() by construction."""
+    while True:
+        chars = [secrets.choice(_TEMP_ALPHABET) for _ in range(length - 2)] + [secrets.choice(_TEMP_SYMBOLS) for _ in range(2)]
+        # shuffle with a CSPRNG
+        for i in range(len(chars) - 1, 0, -1):
+            j = secrets.randbelow(i + 1)
+            chars[i], chars[j] = chars[j], chars[i]
+        pw = "".join(chars)
+        if password_problem(pw) is None:
+            return pw

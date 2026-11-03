@@ -44,6 +44,7 @@ from payload import MAX_MESSAGE_BYTES, MESSAGE_BITS as PAYLOAD_BITS, MessageTooL
 
 import config
 from auth_routes import limiter, require_user, router as auth_router
+from admin_routes import router as admin_router
 from db import AdminUser, SessionLocal, audit, get_db, init_db
 
 MESSAGE_BITS = 1024          # must match training (configs/config.yaml -> message.bits)
@@ -98,6 +99,7 @@ async def security_middleware(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 # ---------------------------------------------------------------- model load
 _ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)

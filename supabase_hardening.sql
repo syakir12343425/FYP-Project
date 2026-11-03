@@ -1,6 +1,7 @@
 -- =====================================================================================
--- supabase_hardening.sql  (v2)  -  run ONCE in the Supabase SQL editor, as the owner,
--- AFTER `python create_admin.py` has created the tables.
+-- supabase_hardening.sql  (v3: multi-user accounts, Nov 2026)  -  run ONCE in the Supabase SQL editor, as the owner,
+-- AFTER `python create_admin.py` has created the tables
+-- (upgrading from v2: run `python tools/migrate_users.py` with the owner URL first).
 --
 -- Before running: replace SCRAM_VERIFIER_HERE with the line printed by
 --     python tools/make_db_role_secret.py
@@ -29,7 +30,8 @@ revoke all on all sequences in schema public from anon, authenticated;
 --    The server stops connecting as `postgres` (owner: can drop tables, read everything).
 --    `stego_app` can do exactly what the code needs and nothing else:
 --      * cannot create / alter / drop tables (no DDL)
---      * cannot create new admin accounts or change password hashes
+--      * can create NORMAL user accounts and set their passwords (admin page in the app),
+--        but can never create, promote, reset or disable an ADMIN account (trigger in step 3b)
 --      * audit_log is APPEND-ONLY: cannot read, edit or delete log entries
 --        -> an attacker who takes over the app cannot erase their tracks.
 -- -------------------------------------------------------------------------------------
@@ -46,9 +48,16 @@ alter role stego_app with login connection limit 10 password 'SCRAM_VERIFIER_HER
 
 grant usage on schema public to stego_app;
 
--- admin_users: read for login; only the lockout counters may change.
+-- admin_users: read for login; lockout counters and last login change on every login.
+-- v3: an admin creates normal users in the app, users choose their own password, an admin can
+-- disable them. Username, role and created_at can never be updated; no deletes.
 grant select on public.admin_users to stego_app;
-grant update (failed_attempts, locked_until) on public.admin_users to stego_app;
+revoke update on public.admin_users from stego_app;
+grant update (failed_attempts, locked_until, last_login_at,
+              password_hash, must_change_password, disabled) on public.admin_users to stego_app;
+grant insert (username, password_hash, role, disabled, must_change_password,
+              failed_attempts, locked_until, created_at, last_login_at) on public.admin_users to stego_app;
+grant usage on sequence public.admin_users_id_seq to stego_app;
 
 -- refresh_tokens: issue new tokens, mark them revoked. No delete, no other column edits.
 grant select, insert on public.refresh_tokens to stego_app;
@@ -81,6 +90,48 @@ create policy stego_app_all on public.revoked_families for all to stego_app usin
 
 drop policy if exists stego_app_all on public.audit_log;
 create policy stego_app_all on public.audit_log        for all to stego_app using (true) with check (true);
+
+-- -------------------------------------------------------------------------------------
+-- 3b. Admin accounts are out of the app's reach (v3).
+--     Column grants cannot say "only for rows where role = 'user'", so a trigger does it.
+--     For stego_app only (the owner, used by create_admin.py, is not affected):
+--       * INSERT must be role 'user'                       -> no new admins
+--       * an admin row's password_hash / disabled /
+--         must_change_password cannot change               -> no taking over or locking out the admin
+--     (role and username are not in the UPDATE grant at all -> no promotion, no renaming)
+--     So even with the server fully compromised, an attacker gets at most normal accounts.
+-- -------------------------------------------------------------------------------------
+create or replace function public.protect_admin_accounts() returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+    if current_user <> 'stego_app' then
+        return new;
+    end if;
+    if tg_op = 'INSERT' then
+        if new.role is distinct from 'user' then
+            raise exception 'stego_app may only create normal user accounts' using errcode = '42501';
+        end if;
+        return new;
+    end if;
+    if new.role is distinct from old.role then
+        raise exception 'stego_app may not change roles' using errcode = '42501';
+    end if;
+    if old.role = 'admin' and (new.password_hash is distinct from old.password_hash
+                               or new.disabled is distinct from old.disabled
+                               or new.must_change_password is distinct from old.must_change_password) then
+        raise exception 'stego_app may not change admin accounts' using errcode = '42501';
+    end if;
+    return new;
+end $$;
+
+revoke all on function public.protect_admin_accounts() from public, anon, authenticated;
+
+drop trigger if exists protect_admin_accounts on public.admin_users;
+create trigger protect_admin_accounts
+    before insert or update on public.admin_users
+    for each row execute function public.protect_admin_accounts();
 
 commit;
 

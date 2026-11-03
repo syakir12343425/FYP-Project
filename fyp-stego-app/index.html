@@ -28,6 +28,28 @@
     </form>
   </div>
 
+  <!-- CHOOSE / CHANGE PASSWORD. Forced (no Cancel) when an admin created or reset the account. -->
+  <div class="login-overlay" id="password-overlay" role="dialog" aria-modal="true" aria-labelledby="password-title">
+    <form class="login-card" id="password-form" autocomplete="on">
+      <h2 id="password-title">Choose your own password</h2>
+      <p class="login-sub" id="password-intro">You signed in with a temporary password from your admin. Choose a new one to continue.</p>
+      <input type="text" id="password-username" autocomplete="username" aria-label="Username" tabindex="-1" hidden>
+      <label for="password-current" id="password-current-label">Temporary password</label>
+      <input id="password-current" type="password" autocomplete="current-password" maxlength="128" required>
+      <label for="password-new">New password</label>
+      <input id="password-new" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="password-rules">
+      <p class="field-hint" id="password-rules">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</p>
+      <label for="password-repeat">Repeat new password</label>
+      <input id="password-repeat" type="password" autocomplete="new-password" maxlength="128" required>
+      <div class="login-error" id="password-error" role="alert"></div>
+      <button type="submit" class="btn btn-primary w-full" id="password-submit">Save new password</button>
+      <div class="password-secondary">
+        <button type="button" class="link-btn" id="password-cancel">Cancel</button>
+        <button type="button" class="link-btn" id="password-logout">Log out instead</button>
+      </div>
+    </form>
+  </div>
+
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- Main Grid Layout -->
@@ -44,6 +66,7 @@
           <button type="button" class="site-link" data-goto="page-embedding" data-mode-link="hide">Hide a message</button>
           <button type="button" class="site-link" data-goto="page-read" data-mode-link="read">Read a message</button>
           <button type="button" class="site-link" data-goto="page-results" data-mode-link="results">Results</button>
+          <button type="button" class="site-link admin-only" data-goto="page-users" data-mode-link="users">Users</button>
         </nav>
         <div class="site-tools">
           <label class="switch theme-switch" title="Dark theme">
@@ -51,6 +74,7 @@
             <span class="slider"></span>
           </label>
           <span class="site-user">Signed in as <strong id="current-user">-</strong></span>
+          <button type="button" class="link-btn user-only" id="btn-change-password">Change password</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Log out</button>
         </div>
       </div>
@@ -140,6 +164,50 @@
             <li><strong>Read back</strong><span>Upload the image you received. Error correction repairs damaged bytes, or the app says the message is lost.</span></li>
           </ol>
           <p class="home-results-link"><button type="button" class="link-btn" data-goto="page-results">See how the four methods compare in measured tests</button></p>
+        </section>
+
+        <!-- ================= USERS (admins only; the server enforces this, the UI only hides the link) ================= -->
+        <section id="page-users" class="viewport">
+          <div class="users-layout">
+            <div class="control-card">
+              <div class="card-header"><h3>Add a person</h3></div>
+              <div class="card-body">
+                <form id="user-create-form" class="user-create-form">
+                  <label class="section-label" for="user-create-name">Username</label>
+                  <div class="user-create-row">
+                    <input id="user-create-name" class="form-control" type="text" maxlength="32" autocomplete="off" spellcheck="false"
+                           required aria-describedby="user-create-hint">
+                    <button type="submit" class="btn btn-primary" id="user-create-submit">Create account</button>
+                  </div>
+                  <p class="field-hint" id="user-create-hint">3 to 32 characters: letters, digits, dot, dash or underscore. The app makes a one-time password; the person chooses their own at first sign-in.</p>
+                  <p class="login-error" id="user-create-error" role="alert"></p>
+                </form>
+                <div class="temp-password" id="temp-password-box" hidden aria-live="polite">
+                  <p class="temp-password-title" id="temp-password-title"></p>
+                  <div class="temp-password-row">
+                    <code id="temp-password-value"></code>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-temp">Copy</button>
+                  </div>
+                  <p class="field-hint">Give this to the person yourself. It is shown only once and works only for choosing a new password.</p>
+                  <button type="button" class="link-btn" id="btn-hide-temp">I have passed it on, hide it</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="card-header"><h3>Accounts</h3><span class="card-header-note" id="users-count"></span></div>
+              <div class="card-body">
+                <p class="login-error" id="users-error" role="alert"></p>
+                <div class="table-scroll">
+                  <table class="academic-table users-table" aria-label="Accounts">
+                    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody id="users-tbody"><tr><td colspan="5" class="cell-note">Loading&hellip;</td></tr></tbody>
+                  </table>
+                </div>
+                <p class="field-hint">Admin accounts can only be added or reset on the server with <code>python create_admin.py</code>. Accounts are disabled rather than deleted, so the audit log keeps pointing at real people.</p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- ================= RESULTS (design round 2) ================= -->

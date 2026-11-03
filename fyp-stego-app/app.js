@@ -114,16 +114,27 @@ const utf8Bytes = (t) => new TextEncoder().encode(t).length;
 let accessToken = null;
 let refreshTimer = null;
 
+// Role and must-change flag only shape the UI; the server re-checks both on every request.
+let session = { username: '', role: 'user', mustChange: false };
+
 function setSession(data) {
   accessToken = data.access_token;
+  session = { username: data.username, role: data.role || 'user', mustChange: Boolean(data.must_change_password) };
   document.getElementById('current-user').innerText = data.username;
+  document.body.dataset.role = session.role;
   document.getElementById('login-overlay').classList.remove('active');
+  if (session.mustChange) openPasswordDialog(true);
+  else if (session.role !== 'admin' && document.body.dataset.mode === 'users') handleNavigation('page-home');
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(silentRefresh, Math.max(10, data.expires_in - 60) * 1000);
 }
 
 function clearSession() {
   accessToken = null;
+  session = { username: '', role: 'user', mustChange: false };
+  delete document.body.dataset.role;
+  closePasswordDialog();
+  hideTempPassword();
   clearTimeout(refreshTimer);
   document.getElementById('login-overlay').classList.add('active');
 }
@@ -170,7 +181,190 @@ async function apiFetch(path, options = {}) {
   if (res.status === 401 && await silentRefresh()) res = await run();
   if (res.status === 401) throw new Error("Session expired - please log in again.");
   if (res.status === 429) throw new Error("Too many requests - slow down and retry shortly.");
+  if (res.status === 403 && session.mustChange) { openPasswordDialog(true); throw new Error("Choose a new password first."); }
   return res;
+}
+
+// Reads FastAPI's {"detail": "..."} (a string, or a list of validation errors) into one sentence.
+async function errorDetail(res, fallback) {
+  try {
+    const body = await res.json();
+    if (typeof body.detail === 'string') return body.detail;
+    if (Array.isArray(body.detail) && body.detail[0] && body.detail[0].msg) return body.detail[0].msg;
+  } catch (_) { /* not JSON */ }
+  return fallback;
+}
+
+// ------------------------------------------------------------ change password
+function openPasswordDialog(forced) {
+  const ov = document.getElementById('password-overlay');
+  ov.dataset.forced = String(forced);
+  document.getElementById('password-title').textContent = forced ? 'Choose your own password' : 'Change password';
+  document.getElementById('password-intro').textContent = forced
+    ? 'You signed in with a one-time password from your admin. Choose your own password to continue.'
+    : 'Other devices where you are signed in will be signed out.';
+  document.getElementById('password-current-label').textContent = forced ? 'One-time password' : 'Current password';
+  document.getElementById('password-username').value = session.username;
+  document.getElementById('password-error').textContent = '';
+  ov.classList.add('active');
+  document.getElementById('password-current').focus();
+}
+
+function closePasswordDialog() {
+  const ov = document.getElementById('password-overlay');
+  ov.classList.remove('active');
+  ['password-current', 'password-new', 'password-repeat'].forEach(id => { document.getElementById(id).value = ''; });
+}
+
+async function handlePasswordChange(e) {
+  e.preventDefault();
+  const err = document.getElementById('password-error');
+  const btn = document.getElementById('password-submit');
+  const current = document.getElementById('password-current').value;
+  const next = document.getElementById('password-new').value;
+  err.textContent = '';
+  if (next !== document.getElementById('password-repeat').value) { err.textContent = 'The two new passwords are different.'; return; }
+  btn.disabled = true;
+  try {
+    const run = () => fetch(`${API_BASE}/api/auth/change-password`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', 'Authorization': `Bearer ${accessToken}` },
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    let res = await run();
+    if (res.status === 401 && await silentRefresh()) res = await run();
+    if (res.status === 429) throw new Error('Too many attempts. Wait a minute and try again.');
+    if (!res.ok) throw new Error(await errorDetail(res, 'Could not change the password.'));
+    closePasswordDialog();
+    setSession(await res.json());
+  } catch (ex) {
+    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------ users page (admins)
+const fmtDate = (iso) => iso
+  ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : 'Never';
+
+function userStatus(u) {
+  if (u.disabled) return ['Disabled', 'off'];
+  if (u.locked) return ['Locked (too many wrong passwords)', 'warn'];
+  if (u.must_change_password) return ['Waiting for first sign-in', 'warn'];
+  return ['Active', 'ok'];
+}
+
+function showTempPassword(title, pw) {
+  document.getElementById('temp-password-title').textContent = title;
+  document.getElementById('temp-password-value').textContent = pw;
+  document.getElementById('temp-password-box').hidden = false;
+}
+function hideTempPassword() {
+  document.getElementById('temp-password-value').textContent = '';
+  document.getElementById('temp-password-box').hidden = true;
+}
+
+async function adminCall(path, method = 'POST', body) {
+  const res = await apiFetch(path, {
+    method, headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, `Request failed (${res.status}).`));
+  return res.json();
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-tbody');
+  tbody.replaceChildren();
+  document.getElementById('users-count').textContent = `${users.length} account${users.length === 1 ? '' : 's'}`;
+  for (const u of users) {
+    const tr = document.createElement('tr');
+    const cell = (text, cls) => { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
+    cell(u.username, 'user-name');
+    cell(u.role === 'admin' ? 'Admin' : 'User');
+    const [label, tone] = userStatus(u);
+    const st = cell('');
+    const pill = document.createElement('span'); pill.className = `status-pill ${tone}`; pill.textContent = label; st.appendChild(pill);
+    cell(fmtDate(u.last_login_at));
+    const actions = document.createElement('div'); actions.className = 'user-actions';
+    cell('', 'user-actions-cell').appendChild(actions);
+    const add = (text, fn, cls = 'btn-secondary') => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = `btn ${cls} btn-sm`; b.textContent = text;
+      b.setAttribute('aria-label', `${text}: ${u.username}`);
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        document.getElementById('users-error').textContent = '';
+        try { await fn(); } catch (ex) { document.getElementById('users-error').textContent = ex.message; }
+        finally { b.disabled = false; }
+      });
+      actions.appendChild(b);
+    };
+    if (u.locked) add('Unlock', async () => { await adminCall(`/api/admin/users/${u.id}/unlock`); await loadUsers(); });
+    if (u.role !== 'admin') {
+      add('Reset password', async () => {
+        const r = await adminCall(`/api/admin/users/${u.id}/reset-password`);
+        showTempPassword(`New one-time password for ${r.user.username}`, r.temporary_password);
+        await loadUsers();
+      });
+      if (u.disabled) add('Enable', async () => { await adminCall(`/api/admin/users/${u.id}/enable`); await loadUsers(); });
+      else add('Disable', async () => { await adminCall(`/api/admin/users/${u.id}/disable`); await loadUsers(); }, 'btn-danger-outline');
+    } else if (!u.locked) {
+      const note = document.createElement('span'); note.className = 'cell-note'; note.textContent = 'Managed on the server';
+      actions.appendChild(note);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+async function loadUsers() {
+  const err = document.getElementById('users-error');
+  try {
+    const data = await adminCall('/api/admin/users', 'GET');
+    err.textContent = '';
+    renderUsers(data.users);
+  } catch (ex) {
+    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+  }
+}
+
+async function handleCreateUser(e) {
+  e.preventDefault();
+  const input = document.getElementById('user-create-name');
+  const err = document.getElementById('user-create-error');
+  const btn = document.getElementById('user-create-submit');
+  err.textContent = '';
+  btn.disabled = true;
+  try {
+    const r = await adminCall('/api/admin/users', 'POST', { username: input.value.trim() });
+    input.value = '';
+    showTempPassword(`Account created for ${r.user.username}. One-time password:`, r.temporary_password);
+    await loadUsers();
+  } catch (ex) {
+    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function initAccounts() {
+  document.getElementById('password-form').addEventListener('submit', handlePasswordChange);
+  document.getElementById('password-cancel').addEventListener('click', closePasswordDialog);
+  document.getElementById('password-logout').addEventListener('click', handleLogout);
+  document.getElementById('btn-change-password').addEventListener('click', () => openPasswordDialog(false));
+  document.getElementById('password-overlay').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('password-overlay').dataset.forced !== 'true') closePasswordDialog();
+  });
+  document.getElementById('user-create-form').addEventListener('submit', handleCreateUser);
+  document.getElementById('btn-hide-temp').addEventListener('click', hideTempPassword);
+  document.getElementById('btn-copy-temp').addEventListener('click', async () => {
+    const b = document.getElementById('btn-copy-temp');
+    try { await navigator.clipboard.writeText(document.getElementById('temp-password-value').textContent); b.textContent = 'Copied'; }
+    catch (_) { b.textContent = 'Select and copy it by hand'; }
+    setTimeout(() => { b.textContent = 'Copy'; }, 2000);
+  });
 }
 
 async function handleLogin(e) {
@@ -369,9 +563,13 @@ const PAGE_ORDER = ['page-embedding', 'page-result', 'page-downscaling', 'page-e
 
 // Which flow a page belongs to: the Start page, the 4-step Hide flow, or the 1-step Read flow.
 const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 'read'
-  : id === 'page-results' ? 'results' : 'hide');
+  : id === 'page-results' ? 'results' : id === 'page-users' ? 'users' : 'hide');
 
 function handleNavigation(targetId) {
+  if (targetId === 'page-users') {
+    if (session.role !== 'admin') targetId = 'page-home';
+    else loadUsers();
+  }
   document.body.dataset.mode = pageMode(targetId);
   const mode = pageMode(targetId);
   // Page heading: hide steps take the step label from the stepper; the other pages have fixed names.
@@ -380,11 +578,13 @@ function handleNavigation(targetId) {
     mode === 'home' ? 'Hide or read a message'
       : mode === 'read' ? 'Read a hidden message'
       : mode === 'results' ? 'Measured results'
+      : mode === 'users' ? 'Accounts'
       : (stepBtn ? stepBtn.textContent : '');
   document.getElementById('topbar-step').textContent =
     mode === 'home' ? 'Start'
       : mode === 'read' ? 'Read a message'
       : mode === 'results' ? 'Results'
+      : mode === 'users' ? 'Users'
       : `Hide a message \u00b7 Step ${PAGE_ORDER.indexOf(targetId) + 1} of ${PAGE_ORDER.length}`;
   document.querySelectorAll('.site-link').forEach(l => {
     if (l.dataset.modeLink === mode) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');
@@ -1428,6 +1628,7 @@ function initHomeTool() {
 function initApp() {
   initReadFlow();
   initHomeTool();
+  initAccounts();
   renderResultsPage();
   document.querySelectorAll('.bench-tab').forEach(b => b.addEventListener('click', () => setBenchTab(b.dataset.benchTab)));
 
