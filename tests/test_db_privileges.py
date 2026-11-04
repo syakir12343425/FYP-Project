@@ -39,12 +39,18 @@ MUST_WORK = [
     ("add a recovery code",            "insert into mfa_recovery_codes (user_id, code_hash, created_at) "
                                        "select id, 'priv_test', now() from admin_users limit 1 returning id"),
     ("mark a recovery code used",      "update mfa_recovery_codes set used_at = now() where id = -1"),
+    # v5, self sign-up
+    ("create a sign-up (pending user)", "insert into admin_users (username, password_hash, role, failed_attempts, created_at, pending_approval) "
+                                        "values ('priv_test_signup', 'x', 'user', 0, now(), true) returning id"),
+    ("approve a sign-up",              "update admin_users set pending_approval = false where id = -1"),
 ]
 
 MUST_FAIL = [
     ("read audit log contents",        "select event, username, ip from audit_log limit 1"),
     ("edit an audit event",            "update audit_log set detail = 'tampered' where id = -1"),
     ("delete audit events",            "delete from audit_log where id = -1"),
+    ("sign up as an admin",            "insert into admin_users (username, password_hash, role, failed_attempts, created_at, pending_approval) "
+                                       "values ('evil2', 'x', 'admin', 0, now(), true)"),
     ("create a new admin",             "insert into admin_users (username, password_hash, role, failed_attempts, created_at) "
                                        "values ('evil', 'x', 'admin', 0, now())"),
     ("change an admin password hash",  "update admin_users set password_hash = 'x' where role = 'admin'"),

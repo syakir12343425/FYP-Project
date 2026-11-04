@@ -37,3 +37,19 @@ BCRYPT_ROUNDS = 12
 MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY", "")
 REQUIRE_ADMIN_MFA = os.getenv("REQUIRE_ADMIN_MFA", "true").lower() == "true"   # admins must enrol to manage accounts
 MFA_ISSUER = "RobustStego"
+
+# Self sign-up (Nov 2026): register with an email address, confirm it with the link that is emailed, then
+# set up two-step verification at first sign-in. Optionally an admin must also approve each sign-up.
+ALLOW_SIGNUP = os.getenv("ALLOW_SIGNUP", "true").lower() == "true"
+SIGNUP_REQUIRES_APPROVAL = os.getenv("SIGNUP_REQUIRES_APPROVAL", "false").lower() == "true"
+MAX_PENDING_SIGNUPS = int(os.getenv("MAX_PENDING_SIGNUPS", "50"))   # sign-ups pause when this many wait (unconfirmed or unapproved)
+EMAIL_TOKEN_HOURS = int(os.getenv("EMAIL_TOKEN_HOURS", "24"))
+REQUIRE_MFA_ALL = os.getenv("REQUIRE_MFA_ALL", "true").lower() == "true"   # everyone must set up two-step to use the app
+
+# Outgoing email (mailer.py). Gmail: smtp.gmail.com, 587, an APP PASSWORD (not the Gmail password).
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+MAIL_FROM = os.getenv("MAIL_FROM", "")
+PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8080").rstrip("/")

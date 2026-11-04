@@ -120,7 +120,12 @@ let session = { username: '', role: 'user', mustChange: false, mfaEnabled: false
 function setSession(data) {
   accessToken = data.access_token;
   session = { username: data.username, role: data.role || 'user', mustChange: Boolean(data.must_change_password),
-              mfaEnabled: Boolean(data.mfa_enabled) };
+              mfaEnabled: Boolean(data.mfa_enabled), mfaRequired: Boolean(data.mfa_required) };
+  showLoginNotice('');
+  document.getElementById('login-resend').hidden = true;
+  // Two-step verification is compulsory: until it is on, only the Account page is available.
+  if (session.mfaRequired && !session.mfaEnabled) document.body.dataset.mfaSetup = '1';
+  else delete document.body.dataset.mfaSetup;
   document.getElementById('current-user').innerText = data.username;
   document.body.dataset.role = session.role;
   document.getElementById('login-overlay').classList.remove('active');
@@ -131,6 +136,7 @@ function setSession(data) {
     setTimeout(() => document.body.classList.remove('first-paint'), 1200);
   }
   if (session.mustChange) openPasswordDialog(true);
+  else if (document.body.dataset.mfaSetup) handleNavigation('page-account');
   else if (session.role !== 'admin' && document.body.dataset.mode === 'users') handleNavigation('page-home');
   if (document.body.dataset.mode === 'account') loadMfaStatus();
   clearTimeout(refreshTimer);
@@ -192,6 +198,7 @@ async function apiFetch(path, options = {}) {
   if (res.status === 401) throw new Error("Session expired - please log in again.");
   if (res.status === 429) throw new Error("Too many requests - slow down and retry shortly.");
   if (res.status === 403 && session.mustChange) { openPasswordDialog(true); throw new Error("Choose a new password first."); }
+  if (res.status === 403 && document.body.dataset.mfaSetup) { handleNavigation('page-account'); throw new Error("Set up two-step verification first."); }
   return res;
 }
 
@@ -274,6 +281,8 @@ const fmtDate = (iso) => iso
   : 'Never';
 
 function userStatus(u) {
+  if (u.pending_approval) return ['Waiting for approval', 'warn'];
+  if (u.email && !u.email_verified && !u.disabled) return ['Email not confirmed', 'warn'];
   if (u.disabled) return ['Disabled', 'off'];
   if (u.locked) return ['Locked (too many wrong passwords)', 'warn'];
   if (u.must_change_password) return ['Waiting for first sign-in', 'warn'];
@@ -302,11 +311,19 @@ async function adminCall(path, method = 'POST', body) {
 function renderUsers(users) {
   const tbody = document.getElementById('users-tbody');
   tbody.replaceChildren();
-  document.getElementById('users-count').textContent = `${users.length} account${users.length === 1 ? '' : 's'}`;
+  const waiting = users.filter(u => u.pending_approval).length;
+  document.getElementById('users-count').textContent = `${users.length} account${users.length === 1 ? '' : 's'}`
+    + (waiting ? `, ${waiting} waiting for approval` : '');
   for (const u of users) {
     const tr = document.createElement('tr');
     const cell = (text, cls) => { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
-    cell(u.username, 'user-name');
+    const nameCell = cell(u.username, 'user-name');
+    if (u.email) {
+      const em = document.createElement('span');
+      em.className = 'user-email';
+      em.textContent = u.email + (u.email_verified ? '' : ' (not confirmed yet)');
+      nameCell.appendChild(em);
+    }
     cell(u.role === 'admin' ? 'Admin' : 'User');
     const [label, tone] = userStatus(u);
     const st = cell('');
@@ -328,7 +345,10 @@ function renderUsers(users) {
       actions.appendChild(b);
     };
     if (u.locked) add('Unlock', async () => { await adminCall(`/api/admin/users/${u.id}/unlock`); await loadUsers(); });
-    if (u.role !== 'admin') {
+    if (u.pending_approval) {
+      add('Approve', async () => { await adminCall(`/api/admin/users/${u.id}/approve`); await loadUsers(); }, 'btn-primary');
+      add('Decline', async () => { await adminCall(`/api/admin/users/${u.id}/decline`); await loadUsers(); }, 'btn-danger-outline');
+    } else if (u.role !== 'admin') {
       add('Reset password', async () => {
         const r = await adminCall(`/api/admin/users/${u.id}/reset-password`);
         showTempPassword(`New one-time password for ${r.user.username}`, r.temporary_password);
@@ -402,6 +422,9 @@ function renderMfaStatus(st) {
   pill.textContent = st.mfa_enabled ? 'On' : 'Off';
   pill.className = `status-pill ${st.mfa_enabled ? 'ok' : 'off'}`;
   document.getElementById('mfa-required-note').hidden = !(st.required && !st.mfa_enabled);
+  document.getElementById('mfa-required-note').textContent = session.role === 'admin'
+    ? 'Two-step verification is required on this site. Turn it on to start using RobustStego and to manage accounts.'
+    : 'Two-step verification is required on this site. Turn it on to start using RobustStego.';
   document.getElementById('mfa-disable').hidden = Boolean(st.required);
   if (st.mfa_enabled) {
     const n = st.recovery_codes_left;
@@ -464,6 +487,7 @@ function initMfaPanels() {
     try {
       const r = await sessionPost('/api/auth/mfa/enable', { code: document.getElementById('mfa-enable-code').value });
       session.mfaEnabled = true;
+      delete document.body.dataset.mfaSetup;
       document.getElementById('mfa-secret').textContent = '';
       document.getElementById('mfa-pill').textContent = 'On';
       document.getElementById('mfa-pill').className = 'status-pill ok';
@@ -510,6 +534,7 @@ function initMfaPanels() {
 
 function initAccounts() {
   initMfaPanels();
+  initSignup();
   document.getElementById('login-mfa-form').addEventListener('submit', handleMfaLogin);
   document.getElementById('login-mfa-back').addEventListener('click', () => showPasswordLoginStep());
   document.getElementById('password-form').addEventListener('submit', handlePasswordChange);
@@ -541,6 +566,11 @@ async function handleLogin(e) {
       password: document.getElementById('login-password').value,
     });
     if (res.status === 429) throw new Error("Too many attempts. Wait a minute and try again.");
+    if (res.status === 403) {
+      const detail = await errorDetail(res, 'This account cannot sign in yet.');
+      document.getElementById('login-resend').hidden = !/confirm your email/i.test(detail);
+      throw new Error(detail);
+    }
     if (!res.ok) throw new Error("Invalid credentials, or account temporarily locked.");
     document.getElementById('login-password').value = '';
     const data = await res.json();
@@ -559,17 +589,19 @@ let mfaLoginToken = null;
 
 function showMfaLoginStep(token) {
   mfaLoginToken = token;
-  document.getElementById('login-form').hidden = true;
-  document.getElementById('login-mfa-form').hidden = false;
+  showLoginCard('login-mfa-form');
   document.getElementById('login-mfa-error').textContent = '';
   document.getElementById('login-mfa-code').value = '';
   document.getElementById('login-mfa-code').focus();
 }
 
+function showLoginCard(id) {
+  ['login-form', 'login-mfa-form', 'signup-form', 'signup-done'].forEach(x => { document.getElementById(x).hidden = x !== id; });
+}
+
 function showPasswordLoginStep(message = '') {
   mfaLoginToken = null;
-  document.getElementById('login-mfa-form').hidden = true;
-  document.getElementById('login-form').hidden = false;
+  showLoginCard('login-form');
   document.getElementById('login-error').textContent = message;
 }
 
@@ -595,6 +627,83 @@ async function handleMfaLogin(e) {
   } finally {
     btn.disabled = false;
   }
+}
+
+// ------------------------------------------------------------ self sign-up
+async function handleSignup(e) {
+  e.preventDefault();
+  const err = document.getElementById('signup-error');
+  const btn = document.getElementById('signup-submit');
+  const pw = document.getElementById('signup-password').value;
+  err.textContent = '';
+  if (pw !== document.getElementById('signup-repeat').value) { err.textContent = 'The two passwords are different.'; return; }
+  btn.disabled = true;
+  try {
+    const res = await authPost('/api/auth/register', {
+      email: document.getElementById('signup-email').value.trim(),
+      username: document.getElementById('signup-username').value.trim(), password: pw });
+    if (res.status === 429) throw new Error('Too many sign-ups from this network. Try again in an hour.');
+    if (!res.ok) throw new Error(await errorDetail(res, 'Could not send the request.'));
+    ['signup-email', 'signup-username', 'signup-password', 'signup-repeat'].forEach(id => { document.getElementById(id).value = ''; });
+    showLoginCard('signup-done');
+    document.getElementById('signup-done-back').focus();
+  } catch (ex) {
+    err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showLoginNotice(text) {
+  const n = document.getElementById('login-notice');
+  n.textContent = text;
+  n.hidden = !text;
+}
+
+// The confirmation email links to  <site>/#verify=<token>. The token is in the #fragment so it never reaches
+// a server log; it is removed from the address bar straight away.
+async function handleVerifyLink() {
+  const m = /^#verify=([A-Za-z0-9_-]{20,200})$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  showPasswordLoginStep();
+  try {
+    const res = await authPost('/api/auth/verify-email', { token: m[1] });
+    if (!res.ok) throw new Error(await errorDetail(res, 'This link is invalid or has expired.'));
+    showLoginNotice((await res.json()).message);
+  } catch (ex) {
+    document.getElementById('login-error').textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
+  }
+}
+
+function initSignup() {
+  document.getElementById('signup-form').addEventListener('submit', handleSignup);
+  document.getElementById('show-signup').addEventListener('click', () => {
+    showLoginCard('signup-form');
+    document.getElementById('signup-error').textContent = '';
+    document.getElementById('signup-email').focus();
+  });
+  document.getElementById('show-login').addEventListener('click', () => { showPasswordLoginStep(); document.getElementById('login-username').focus(); });
+  document.getElementById('signup-done-back').addEventListener('click', () => { showPasswordLoginStep(); document.getElementById('login-username').focus(); });
+  document.getElementById('login-resend').addEventListener('click', async () => {
+    const btn = document.getElementById('login-resend');
+    const err = document.getElementById('login-error');
+    btn.disabled = true;
+    try {
+      const res = await authPost('/api/auth/resend-verification', {
+        username: document.getElementById('login-username').value, password: document.getElementById('login-password').value });
+      if (res.status === 429) throw new Error('Too many requests. Try again in an hour.');
+      if (!res.ok) throw new Error(await errorDetail(res, 'Could not send a new link.'));
+      showLoginNotice((await res.json()).message);
+      err.textContent = ''; btn.hidden = true;
+    } catch (ex) { err.textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message; }
+    finally { btn.disabled = false; }
+  });
+  handleVerifyLink();
+  window.addEventListener('hashchange', handleVerifyLink);   // link opened in a tab that already has the app
+  // Hide the link when the server has sign-up turned off.
+  fetch(`${API_BASE}/api/auth/signup-open`).then(r => r.ok ? r.json() : { open: true })
+    .then(d => { document.getElementById('signup-link-row').hidden = !d.open; }).catch(() => {});
 }
 
 async function handleLogout() {
@@ -774,6 +883,7 @@ const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 're
   : id === 'page-results' ? 'results' : id === 'page-users' ? 'users' : id === 'page-account' ? 'account' : 'hide');
 
 function handleNavigation(targetId) {
+  if (document.body.dataset.mfaSetup && targetId !== 'page-account') targetId = 'page-account';
   if (targetId === 'page-home') requestAnimationFrame(moveTabIndicator);
   if (targetId === 'page-users') {
     if (session.role !== 'admin') targetId = 'page-home';

@@ -22,7 +22,7 @@ with SessionLocal() as db:
         sys.exit(f"'{username}' is a normal user. Reset it from the Users page instead.")
     if u:
         u.password_hash, u.failed_attempts, u.locked_until = hash_password(pw), 0, None
-        u.disabled, u.must_change_password = False, False
+        u.disabled, u.must_change_password, u.email_verified = False, False, True
         print("Existing admin password reset.")
         if u.mfa_enabled and input("Also turn off two-step verification (lost phone)? [y/N] ").strip().lower() == "y":
             u.mfa_enabled, u.mfa_secret_enc, u.mfa_pending_enc, u.mfa_pending_at = False, None, None, None
@@ -30,6 +30,6 @@ with SessionLocal() as db:
                                              MfaRecoveryCode.used_at.is_(None)).update({"used_at": utcnow()})
             print("Two-step verification turned off. Set it up again in the app (Account page).")
     else:
-        db.add(User(username=username, password_hash=hash_password(pw), role="admin"))
+        db.add(User(username=username, password_hash=hash_password(pw), role="admin", email_verified=True))
         print("Admin created.")
     db.commit()

@@ -1,5 +1,5 @@
 -- =====================================================================================
--- supabase_hardening.sql  (v4: multi-user accounts + two-step verification, Nov 2026)  -  run ONCE in the Supabase SQL editor, as the owner,
+-- supabase_hardening.sql  (v5: multi-user accounts + two-step verification + email sign-up, Nov 2026)  -  run ONCE in the Supabase SQL editor, as the owner,
 -- AFTER `python create_admin.py` has created the tables
 -- (upgrading from v2: run `python tools/migrate_users.py` with the owner URL first).
 --
@@ -120,7 +120,9 @@ begin
     end if;
     if old.role = 'admin' and (new.password_hash is distinct from old.password_hash
                                or new.disabled is distinct from old.disabled
-                               or new.must_change_password is distinct from old.must_change_password) then
+                               or new.must_change_password is distinct from old.must_change_password
+                               or new.email is distinct from old.email
+                               or new.email_verified is distinct from old.email_verified) then
         raise exception 'stego_app may not change admin accounts' using errcode = '42501';
     end if;
     if old.role = 'admin' and old.mfa_enabled and (new.mfa_enabled is distinct from old.mfa_enabled
@@ -129,6 +131,12 @@ begin
     end if;
     return new;
 end $$;
+
+-- self sign-up (v5): create an account, confirm its email, approve / decline it
+grant insert (pending_approval, email, email_verified, email_token_hash, email_token_expires)
+    on public.admin_users to stego_app;
+grant update (pending_approval, email, email_verified, email_token_hash, email_token_expires)
+    on public.admin_users to stego_app;
 
 -- -------------------------------------------------------------------------------------
 -- 3c. Two-step verification (v4): recovery-code table locked down like the others,

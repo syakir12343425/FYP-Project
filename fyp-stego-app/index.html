@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
-  <link rel="stylesheet" href="styles.css?v=20261104">
+  <link rel="stylesheet" href="styles.css?v=20261104c">
 </head>
 <body class="dark-theme hide-academic-figures" data-mode="home">
 
@@ -19,13 +19,39 @@
       </div>
       <p class="login-project">Robust Deep Image Steganography Against Downscaling Operations in AI Pipelines</p>
       <p class="login-sub">Authorised access only. Actions are audit-logged.</p>
+      <p class="login-notice" id="login-notice" role="status" hidden></p>
       <label for="login-username">Username</label>
       <input id="login-username" type="text" autocomplete="username" maxlength="64" required>
       <label for="login-password">Password</label>
       <input id="login-password" type="password" autocomplete="current-password" maxlength="128" required>
       <div class="login-error" id="login-error" role="alert"></div>
+      <button type="button" class="btn btn-secondary w-full" id="login-resend" hidden>Send a new confirmation link</button>
       <button type="submit" class="btn btn-primary w-full" id="login-submit">Sign in</button>
+      <p class="login-switch" id="signup-link-row">New here? <button type="button" class="link-btn" id="show-signup">Create an account</button></p>
     </form>
+    <!-- Self sign-up: the account waits for an admin to approve it -->
+    <form class="login-card" id="signup-form" autocomplete="on" hidden>
+      <h2>Create an account</h2>
+      <p class="login-sub">We email you a link to confirm your address. Then sign in and set up two-step verification with an authenticator app on your phone.</p>
+      <label for="signup-email">Email</label>
+      <input id="signup-email" type="email" autocomplete="email" maxlength="254" spellcheck="false" required>
+      <label for="signup-username">Username</label>
+      <input id="signup-username" type="text" autocomplete="username" maxlength="32" spellcheck="false" required aria-describedby="signup-username-hint">
+      <p class="field-hint" id="signup-username-hint">3 to 32 characters: letters, digits, dot, dash or underscore.</p>
+      <label for="signup-password">Password</label>
+      <input id="signup-password" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="signup-password-hint">
+      <p class="field-hint" id="signup-password-hint">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</p>
+      <label for="signup-repeat">Repeat password</label>
+      <input id="signup-repeat" type="password" autocomplete="new-password" maxlength="128" required>
+      <div class="login-error" id="signup-error" role="alert"></div>
+      <button type="submit" class="btn btn-primary w-full" id="signup-submit">Create account</button>
+      <p class="login-switch">Already have an account? <button type="button" class="link-btn" id="show-login">Sign in</button></p>
+    </form>
+    <div class="login-card signup-done" id="signup-done" hidden role="status">
+      <h2>Check your email</h2>
+      <p class="login-sub" id="signup-done-text">We sent a link to confirm your account. Open it, then sign in. The link expires in 24 hours. Not there? Check the spam folder.</p>
+      <button type="button" class="btn btn-secondary w-full" id="signup-done-back">Back to sign in</button>
+    </div>
     <!-- Second step of signing in (two-step verification) -->
     <form class="login-card" id="login-mfa-form" autocomplete="off" hidden>
       <h2>Two-step verification</h2>
@@ -1257,6 +1283,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261104"></script>
+  <script src="app.js?v=20261104c"></script>
 </body>
 </html>

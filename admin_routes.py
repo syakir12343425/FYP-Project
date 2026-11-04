@@ -32,6 +32,7 @@ def _public(u: User) -> dict:
     locked = bool(u.locked_until and aware(u.locked_until) > utcnow())
     return {"id": u.id, "username": u.username, "role": u.role, "disabled": u.disabled, "locked": locked,
             "must_change_password": u.must_change_password, "mfa_enabled": u.mfa_enabled,
+            "pending_approval": u.pending_approval, "email": u.email, "email_verified": u.email_verified,
             "created_at": aware(u.created_at).isoformat() if u.created_at else None,
             "last_login_at": aware(u.last_login_at).isoformat() if u.last_login_at else None}
 
@@ -48,7 +49,8 @@ def _normal_user(db: Session, user_id: int) -> User:
 @router.get("/users")
 @limiter.limit("60/minute")
 def list_users(request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    users = db.scalars(select(User).order_by(User.role, User.username)).all()
+    # waiting sign-ups first, then admins, then users
+    users = db.scalars(select(User).order_by(User.pending_approval.desc(), User.role, User.username)).all()
     return {"users": [_public(u) for u in users]}
 
 
@@ -64,7 +66,9 @@ def create_user(request: Request, body: CreateUserRequest, admin: User = Depends
     if db.scalar(select(User.id).where(func.lower(User.username) == name.lower())) is not None:
         raise HTTPException(409, "That username is taken")
     temp = temporary_password()
-    u = User(username=name, password_hash=hash_password(temp), role="user", must_change_password=True)
+    # Admin-made accounts have no email to confirm: the admin vouches for them.
+    u = User(username=name, password_hash=hash_password(temp), role="user", must_change_password=True,
+             email_verified=True)
     db.add(u)
     try:
         db.commit()
@@ -107,6 +111,7 @@ def enable_user(request: Request, user_id: int, admin: User = Depends(require_ad
                 db: Session = Depends(get_db)):
     u = _normal_user(db, user_id)
     u.disabled = False
+    u.pending_approval = False
     db.commit()
     audit(db, "user_enabled", request, admin.username, f"user={u.username}")
     return {"user": _public(u)}
@@ -136,4 +141,32 @@ def reset_mfa(request: Request, user_id: int, admin: User = Depends(require_admi
     db.commit()
     kill_user_sessions(db, u.id, "mfa_reset")
     audit(db, "user_mfa_reset", request, admin.username, f"user={u.username}")
+    return {"user": _public(u)}
+
+
+@router.post("/users/{user_id}/approve")
+@limiter.limit("30/minute")
+def approve_user(request: Request, user_id: int, admin: User = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    u = _normal_user(db, user_id)
+    if not u.pending_approval:
+        raise HTTPException(409, "This account is not waiting for approval")
+    u.pending_approval, u.disabled = False, False
+    db.commit()
+    audit(db, "signup_approved", request, admin.username, f"user={u.username}")
+    return {"user": _public(u)}
+
+
+@router.post("/users/{user_id}/decline")
+@limiter.limit("30/minute")
+def decline_user(request: Request, user_id: int, admin: User = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    """Declined sign-ups are kept but disabled (never deleted), so the audit log stays meaningful and the
+    username cannot be re-registered by someone else."""
+    u = _normal_user(db, user_id)
+    if not u.pending_approval:
+        raise HTTPException(409, "This account is not waiting for approval")
+    u.pending_approval, u.disabled = False, True
+    db.commit()
+    audit(db, "signup_declined", request, admin.username, f"user={u.username}")
     return {"user": _public(u)}

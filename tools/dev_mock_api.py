@@ -38,12 +38,15 @@ QR = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21"><rect width="2
 USERS = [{"id": 1, "username": "ADMIN", "role": "admin", "disabled": False, "locked": False, "must_change_password": False,
           "created_at": "2026-10-01T09:00:00+00:00", "last_login_at": "2026-11-03T12:30:00+00:00"},
          {"id": 2, "username": "supervisor", "role": "user", "disabled": False, "locked": False, "must_change_password": False,
-          "created_at": "2026-11-01T09:00:00+00:00", "last_login_at": "2026-11-02T10:05:00+00:00", "mfa_enabled": True},
+          "created_at": "2026-11-01T09:00:00+00:00", "last_login_at": "2026-11-02T10:05:00+00:00", "mfa_enabled": True,
+          "email": "syaril@example.edu.my", "email_verified": True},
          {"id": 3, "username": "tester01", "role": "user", "disabled": False, "locked": True, "must_change_password": False,
-          "created_at": "2026-11-01T09:00:00+00:00", "last_login_at": None}]
+          "created_at": "2026-11-01T09:00:00+00:00", "last_login_at": None},
+         {"id": 4, "username": "classmate_amir", "role": "user", "disabled": False, "locked": False, "must_change_password": False,
+          "pending_approval": True, "created_at": "2026-11-04T01:00:00+00:00", "last_login_at": None}]
 def sess():
     return {"access_token": "t", "expires_in": 900, "username": "ADMIN" if ROLE == "admin" else "student1", "role": ROLE,
-            "must_change_password": MUST, "mfa_enabled": MFA}
+            "must_change_password": MUST, "mfa_enabled": MFA, "mfa_required": True}
 RC = ["k7m2q-9xwpr", "a3bcd-efgh2", "pq4rs-tuvw5", "xy6za-bcde7", "fg8hj-kmnp9", "qr2st-uvwx3", "yz4ab-cdef5", "gh6jk-mnpq7", "rs8tu-vwxy9", "za2bc-defg3"]
 
 class H(BaseHTTPRequestHandler):
@@ -63,7 +66,9 @@ class H(BaseHTTPRequestHandler):
         if self.path.endswith("/admin/users"):
             if ROLE != "admin": self._h(403); self.wfile.write(b'{"detail":"Admins only"}'); return
             if not MFA: self._h(403); self.wfile.write(b'{"detail":"Turn on two-step verification (Account page) before managing accounts"}'); return
-            self._h(); self.wfile.write(json.dumps({"users": USERS}).encode()); return
+            self._h(); self.wfile.write(json.dumps({"users": sorted(USERS, key=lambda u: not u.get("pending_approval"))}).encode()); return
+        if self.path.endswith("/auth/signup-open"):
+            self._h(); self.wfile.write(b'{"open": true}'); return
         self._h(404); self.wfile.write(b"{}")
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -74,7 +79,23 @@ class H(BaseHTTPRequestHandler):
         if p.endswith("/auth/refresh"):
             if LOGGED_OUT: return err(401, "No session")
             out = sess()
+        elif p.endswith("/auth/verify-email"):
+            if body.get("token") != "good-token-abcdefghijklmnop": return err(400, "This link is invalid or has expired. Sign in to get a new one.")
+            out = {"ok": True, "message": "Email confirmed. You can sign in now."}
+        elif p.endswith("/auth/resend-verification"):
+            out = {"ok": True, "message": "A new link was sent to u***@example.com."}
+        elif p.endswith("/auth/register"):
+            n = body.get("username", "")
+            if "@" not in body.get("email", ""): return err(400, "Enter a valid email address")
+            if any(u["username"].lower() == n.lower() for u in USERS): return err(409, "That username is taken")
+            if len(body.get("password", "")) < 12: return err(400, "Use at least 12 characters.")
+            USERS.append({"id": len(USERS) + 1, "username": n, "role": "user", "disabled": False, "locked": False,
+                          "must_change_password": False, "pending_approval": True, "created_at": "2026-11-04T02:00:00+00:00", "last_login_at": None})
+            USERS[-1].update({"email": body.get("email"), "email_verified": False, "pending_approval": False})
+            out = {"ok": True, "message": "Check your email for a link to confirm your account."}
         elif p.endswith("/auth/login"):
+            if body.get("username") == "waiting_user": return err(403, "Your account is waiting for an admin to approve it")
+            if body.get("username") == "unconfirmed": return err(403, "Confirm your email first: open the link we sent to u***@example.com")
             if body.get("password") != "Right-Pass-123!": return err(401, "Invalid credentials or account temporarily locked")
             out = {"mfa_required": True, "mfa_token": "mfa-tok"} if MFA else sess()
         elif p.endswith("/auth/mfa"):
@@ -112,6 +133,8 @@ class H(BaseHTTPRequestHandler):
             elif act == "unlock": u["locked"] = False
             elif act == "reset-password": u["must_change_password"] = True
             elif act == "reset-mfa": u["mfa_enabled"] = False
+            elif act == "approve": u["pending_approval"] = False
+            elif act == "decline": u["pending_approval"] = False; u["disabled"] = True
             out = {"user": u, "temporary_password": "Wn3s?Hc8Lq2r-Yd5"} if act == "reset-password" else {"user": u}
         elif p.endswith("/embed"):
             cover = dec(body["cover_image"])

@@ -52,6 +52,15 @@ class User(Base):
     mfa_pending_enc: Mapped[str | None] = mapped_column(String(255), nullable=True)   # during set-up only
     mfa_pending_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     mfa_last_step: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # replay protection
+    # Self sign-up: True until an admin approves the account. A pending account cannot sign in.
+    pending_approval: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Email (self sign-up). Stored lower-case; unique. Accounts made before this, or by an admin, count as
+    # verified. The confirmation token is stored only as a SHA-256 hash, single-use, with an expiry.
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True, unique=True, index=True)
+    # ORM default True: only the self sign-up path creates an unconfirmed account (it sets False explicitly).
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True, server_default=false())
+    email_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    email_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 AdminUser = User
@@ -111,6 +120,12 @@ _NEW_USER_COLUMNS = {
     "mfa_pending_enc":      ("VARCHAR(255)", "VARCHAR(255)"),
     "mfa_pending_at":       ("DATETIME", "TIMESTAMP WITH TIME ZONE"),
     "mfa_last_step":        ("INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    # self sign-up (Nov 2026)
+    "pending_approval":     ("BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT false"),
+    "email":                ("VARCHAR(254)", "VARCHAR(254)"),
+    "email_verified":       ("BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT false"),
+    "email_token_hash":     ("VARCHAR(64)", "VARCHAR(64)"),
+    "email_token_expires":  ("DATETIME", "TIMESTAMP WITH TIME ZONE"),
 }
 
 
@@ -134,6 +149,10 @@ def migrate_users_schema(eng=engine) -> list[str]:
             conn.execute(text(f"ALTER TABLE admin_users ADD COLUMN {col} {ddl}"))
         if "role" in missing:
             conn.execute(text("UPDATE admin_users SET role = 'admin'"))
+        if "email_verified" in missing:      # accounts that existed before email sign-up need no confirmation
+            conn.execute(text("UPDATE admin_users SET email_verified = " + ("1" if sqlite else "true")))
+        if "email" in missing:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_users_email_unique ON admin_users (email)"))
     return missing
 
 
@@ -145,7 +164,7 @@ def init_db():
         insp = inspect(engine)
         if insp.has_table("admin_users") and (missing_user_columns() or not insp.has_table("mfa_recovery_codes")):
             raise RuntimeError("Database is missing the account columns (multi-user / two-step verification). "
-                               "Run supabase_mfa_v4.sql in the Supabase SQL editor (see SECURITY.md)")
+                               "Run the newest supabase_*_v*.sql upgrade in the Supabase SQL editor (see SECURITY.md)")
     Base.metadata.create_all(engine)
     if sqlite and missing_user_columns():
         migrate_users_schema()          # local dev database: just do it

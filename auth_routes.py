@@ -1,10 +1,13 @@
 """/api/auth/*  — login (+ two-step code), refresh (rotating, reuse-detecting), logout, me, change-password,
 two-step verification set-up / turn off / new recovery codes."""
+import hashlib
+import re
+import secrets
 import uuid
 from datetime import timedelta
 
 import jwt
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
@@ -14,6 +17,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 import config
+from mailer import already_registered_email, mail_configured, send_mail_quietly, verification_email
 from db import AdminUser, MfaRecoveryCode, RefreshToken, RevokedFamily, User, audit, aware, get_db, utcnow
 from security import (DUMMY_HASH, create_access_token, create_mfa_token, decode_access_token, decode_mfa_token,
                       decrypt_mfa_secret, encrypt_mfa_secret, hash_password, hash_recovery_code,
@@ -29,6 +33,16 @@ COOKIE = "refresh_token"
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class TokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
 
 
 class MfaLoginRequest(BaseModel):
@@ -60,7 +74,18 @@ def session_body(user: User) -> dict:
     return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
             "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username,
             "role": user.role, "must_change_password": user.must_change_password,
-            "mfa_enabled": user.mfa_enabled}
+            "mfa_enabled": user.mfa_enabled, "mfa_required": mfa_required_for(user)}
+
+
+def mfa_required_for(user: User) -> bool:
+    return config.REQUIRE_MFA_ALL or (user.role == "admin" and config.REQUIRE_ADMIN_MFA)
+
+
+def mask_email(email: str | None) -> str:
+    if not email or "@" not in email:
+        return "your email"
+    local, domain = email.split("@", 1)
+    return f"{local[0]}***@{domain}"
 
 
 def _csrf_guard(request: Request):
@@ -137,6 +162,15 @@ def login(request: Request, body: LoginRequest, response: Response, db: Session 
         # to someone guessing passwords.
         audit(db, "login_blocked_disabled", request, user.username)
         raise HTTPException(401, "Invalid credentials or account temporarily locked")
+
+    # The next two answers are given only to someone who already has the right password, so saying them
+    # plainly is safe and helpful.
+    if not user.email_verified:
+        audit(db, "login_blocked_unverified", request, user.username)
+        raise HTTPException(403, f"Confirm your email first: open the link we sent to {mask_email(user.email)}")
+    if user.pending_approval:
+        audit(db, "login_blocked_pending", request, user.username)
+        raise HTTPException(403, "Your account is waiting for an admin to approve it")
 
     if user.mfa_enabled:
         # Password right, second step still to come. No session yet; the failure counter is NOT reset,
@@ -220,7 +254,7 @@ def login_mfa(request: Request, body: MfaLoginRequest, response: Response, db: S
         raise HTTPException(401, "Sign-in took too long. Start again.")
     user = db.get(User, int(data["sub"]))
     now = utcnow()
-    if user is None or user.disabled or not user.mfa_enabled:
+    if user is None or user.disabled or user.pending_approval or not user.mfa_enabled:
         raise HTTPException(401, "Invalid credentials or account temporarily locked")
     if user.locked_until and aware(user.locked_until) > now:
         audit(db, "login_blocked_locked", request, user.username)
@@ -258,7 +292,7 @@ def refresh(request: Request, response: Response, refresh_token: str | None = Co
     if aware(rec.expires_at) < utcnow():
         raise HTTPException(401, "Session expired")
     user = db.get(User, rec.user_id)
-    if user is None or user.disabled:
+    if user is None or user.disabled or user.pending_approval or not user.email_verified:
         raise HTTPException(401, "Invalid session")
     # Rotate: the old token is single-use. Claim it ATOMICALLY in the database: only the request
     # whose UPDATE flips revoked False->True wins. A plain read-then-write ("if not rec.revoked:
@@ -304,31 +338,36 @@ def require_session_user(request: Request, creds: HTTPAuthorizationCredentials |
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
     user = db.get(User, int(data["sub"]))
-    if user is None or user.disabled:          # disabling takes effect at once, not after 15 minutes
+    if user is None or user.disabled or user.pending_approval or not user.email_verified:   # at once, not after 15 min
         raise HTTPException(401, "Invalid token")
     request.state.username = user.username
     return user
 
 
-def require_user(user: User = Depends(require_session_user)) -> User:
-    """Dependency guarding every protected endpoint."""
+def require_setup_user(user: User = Depends(require_session_user)) -> User:
+    """Signed in and own password chosen. Allowed: setting up two-step verification (and its status)."""
     if user.must_change_password:
         raise HTTPException(403, "Password change required")
+    return user
+
+
+def require_user(user: User = Depends(require_setup_user)) -> User:
+    """Dependency guarding every protected endpoint: also needs two-step verification where it is required."""
+    if mfa_required_for(user) and not user.mfa_enabled:
+        raise HTTPException(403, "Set up two-step verification (Account page) to continue")
     return user
 
 
 def require_admin(user: User = Depends(require_user)) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Admins only")
-    if config.REQUIRE_ADMIN_MFA and not user.mfa_enabled:
-        raise HTTPException(403, "Turn on two-step verification (Account page) before managing accounts")
     return user
 
 
 @router.get("/me")
 def me(user: User = Depends(require_session_user)):
     return {"username": user.username, "role": user.role, "must_change_password": user.must_change_password,
-            "mfa_enabled": user.mfa_enabled}
+            "mfa_enabled": user.mfa_enabled, "mfa_required": mfa_required_for(user)}
 
 
 @router.post("/change-password")
@@ -358,7 +397,7 @@ def change_password(request: Request, body: ChangePasswordRequest, response: Res
 # ------------------------------------------------------------------ two-step verification management
 @router.post("/mfa/setup")
 @limiter.limit("5/minute")
-def mfa_setup(request: Request, body: PasswordConfirm, user: User = Depends(require_user),
+def mfa_setup(request: Request, body: PasswordConfirm, user: User = Depends(require_setup_user),
               db: Session = Depends(get_db)):
     """Start set-up: needs the password again (a stolen, unlocked session alone cannot enrol a device).
     The new secret is kept as 'pending' until a correct code proves the app was set up."""
@@ -378,7 +417,7 @@ def mfa_setup(request: Request, body: PasswordConfirm, user: User = Depends(requ
 
 @router.post("/mfa/enable")
 @limiter.limit("5/minute")
-def mfa_enable(request: Request, body: CodeRequest, user: User = Depends(require_user),
+def mfa_enable(request: Request, body: CodeRequest, user: User = Depends(require_setup_user),
                db: Session = Depends(get_db)):
     _csrf_guard(request)
     if user.mfa_enabled:
@@ -404,8 +443,8 @@ def mfa_disable(request: Request, body: PasswordAndCode, user: User = Depends(re
     _csrf_guard(request)
     if not user.mfa_enabled:
         raise HTTPException(409, "Two-step verification is already off")
-    if user.role == "admin" and config.REQUIRE_ADMIN_MFA:
-        raise HTTPException(403, "Admins must keep two-step verification on")
+    if mfa_required_for(user):
+        raise HTTPException(403, "Two-step verification is required on this site and cannot be turned off")
     if not verify_password(body.password, user.password_hash) or check_second_factor(db, user, body.code) is None:
         audit(db, "mfa_disable_failed", request, user.username)
         raise HTTPException(400, "Password or code is wrong")
@@ -432,8 +471,129 @@ def mfa_new_recovery_codes(request: Request, body: PasswordAndCode, user: User =
 
 
 @router.get("/mfa/status")
-def mfa_status(user: User = Depends(require_user), db: Session = Depends(get_db)):
+def mfa_status(user: User = Depends(require_setup_user), db: Session = Depends(get_db)):
     left = db.scalar(select(func.count()).select_from(MfaRecoveryCode)
                      .where(MfaRecoveryCode.user_id == user.id, MfaRecoveryCode.used_at.is_(None)))
     return {"mfa_enabled": user.mfa_enabled, "recovery_codes_left": int(left or 0),
-            "required": user.role == "admin" and config.REQUIRE_ADMIN_MFA}
+            "required": mfa_required_for(user)}
+
+
+# ------------------------------------------------------------------ self sign-up
+USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$")
+
+
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
+
+
+def _new_email_token(user: User) -> str:
+    raw = secrets.token_urlsafe(32)
+    user.email_token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    user.email_token_expires = utcnow() + timedelta(hours=config.EMAIL_TOKEN_HOURS)
+    return raw
+
+
+def _send_verification(background: BackgroundTasks, user: User, raw: str):
+    # The token rides in the URL #fragment: browsers never send that to a server or in a Referer header.
+    subject, text = verification_email(user.username, f"{config.PUBLIC_URL}/#verify={raw}")
+    background.add_task(send_mail_quietly, user.email, subject, text)
+
+
+@router.post("/register", status_code=201)
+@limiter.limit("3/hour")
+def register(request: Request, body: RegisterRequest, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """Anyone may create an account with an email address. It works only after the link sent to that address is
+    opened, and the app is usable only after two-step verification is set up at first sign-in.
+    Against bots and abuse: 3 sign-ups per hour per IP, and sign-ups pause while MAX_PENDING_SIGNUPS accounts
+    are still unconfirmed (or unapproved). An email address that already has an account gets the same answer
+    as a new one (and its owner gets a heads-up email), so the form does not reveal who is registered."""
+    _csrf_guard(request)
+    if not config.ALLOW_SIGNUP:
+        raise HTTPException(403, "Sign-up is closed. Ask an admin for an account.")
+    if not mail_configured() and config.ENV != "dev":
+        raise HTTPException(503, "Sign-up is not available right now.")
+    name, email = body.username.strip(), body.email.strip().lower()
+    if not USERNAME_RE.match(name):
+        raise HTTPException(400, "Username: 3 to 32 characters, letters, digits, dot, dash or underscore, "
+                                 "starting with a letter or digit")
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address")
+    problem = password_problem(body.password, name)
+    if problem:
+        raise HTTPException(400, problem)
+    waiting = db.scalar(select(func.count()).select_from(User).where(
+        (User.pending_approval.is_(True)) | ((User.email_verified.is_(False)) & (User.email.is_not(None)))))
+    if (waiting or 0) >= config.MAX_PENDING_SIGNUPS:
+        audit(db, "signup_paused_queue_full", request, name)
+        raise HTTPException(503, "Sign-ups are paused for now. Try again later.")
+    if db.scalar(select(User.id).where(func.lower(User.username) == name.lower())) is not None:
+        hash_password(body.password)        # similar timing to a real sign-up
+        raise HTTPException(409, "That username is taken")
+    done = {"ok": True, "message": "Check your email for a link to confirm your account."}
+    existing = db.scalar(select(User).where(User.email == email))
+    if (existing is not None and not existing.email_verified and existing.email_token_expires
+            and aware(existing.email_token_expires) < utcnow()):
+        # Someone registered this address and never confirmed it (maybe not the owner). Once their link has
+        # expired, the address is released so its real owner can sign up; that stale account stays disabled.
+        existing.email, existing.disabled, existing.email_token_hash = None, True, None
+        db.commit()
+        audit(db, "signup_released_stale_email", request, existing.username)
+        existing = None
+    if existing is not None:
+        hash_password(body.password)
+        subject, text = already_registered_email(existing.username)
+        background.add_task(send_mail_quietly, email, subject, text)
+        audit(db, "signup_existing_email", request, name)
+        return done
+    u = User(username=name, email=email, email_verified=False, password_hash=hash_password(body.password),
+             role="user", pending_approval=config.SIGNUP_REQUIRES_APPROVAL)
+    raw = _new_email_token(u)
+    db.add(u)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "That username is taken")
+    _send_verification(background, u, raw)
+    audit(db, "signup_requested", request, name)
+    return done
+
+
+@router.post("/verify-email")
+@limiter.limit("10/minute")
+def verify_email(request: Request, body: TokenRequest, db: Session = Depends(get_db)):
+    _csrf_guard(request)
+    h = hashlib.sha256(body.token.encode()).hexdigest()
+    u = db.scalar(select(User).where(User.email_token_hash == h))
+    if u is None or not u.email_token_expires or aware(u.email_token_expires) < utcnow():
+        raise HTTPException(400, "This link is invalid or has expired. Sign in to get a new one.")
+    claimed = db.execute(update(User).where(User.id == u.id, User.email_token_hash == h)     # single use, atomic
+                         .values(email_verified=True, email_token_hash=None, email_token_expires=None)).rowcount
+    db.commit()
+    if claimed != 1:
+        raise HTTPException(400, "This link is invalid or has expired. Sign in to get a new one.")
+    audit(db, "email_verified", request, u.username)
+    return {"ok": True, "message": "Email confirmed. You can sign in now."}
+
+
+@router.post("/resend-verification")
+@limiter.limit("3/hour")
+def resend_verification(request: Request, body: LoginRequest, background: BackgroundTasks,
+                        db: Session = Depends(get_db)):
+    """New confirmation link. Needs the password, so nobody can make the app email other people's addresses."""
+    _csrf_guard(request)
+    u = db.scalar(select(User).where(User.username == body.username))
+    ok = verify_password(body.password, u.password_hash if u else DUMMY_HASH)
+    if not ok or u is None or u.disabled:
+        raise HTTPException(401, "Invalid credentials or account temporarily locked")
+    if u.email_verified or not u.email:
+        raise HTTPException(409, "This account is already confirmed")
+    raw = _new_email_token(u)
+    db.commit()
+    _send_verification(background, u, raw)
+    audit(db, "email_verification_resent", request, u.username)
+    return {"ok": True, "message": f"A new link was sent to {mask_email(u.email)}."}
+
+
+@router.get("/signup-open")
+def signup_open():
+    return {"open": config.ALLOW_SIGNUP and (mail_configured() or config.ENV == "dev")}

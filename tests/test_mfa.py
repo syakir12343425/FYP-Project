@@ -14,6 +14,7 @@ _tmp = Path(tempfile.mkdtemp())
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp / 'mfa_test.db'}"
 os.environ["JWT_SECRET"] = "test-only-secret-" + "x" * 40
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:8080"
+os.environ["REQUIRE_MFA_ALL"] = "false"            # compulsory two-step is tested in tests/test_signup.py
 os.environ["MFA_ENCRYPTION_KEY"] = base64.b64encode(secrets.token_bytes(32)).decode()
 os.environ["REQUIRE_ADMIN_MFA"] = "true"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

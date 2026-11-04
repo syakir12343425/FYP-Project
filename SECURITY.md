@@ -10,7 +10,13 @@
 | Session hijack enrolling the attacker's phone | Set-up needs the password again; turning off or new recovery codes need password + a current code | auth_routes.py |
 | Lost phone | 10 one-time recovery codes; admin can reset a user's two-step; an admin's own only with create_admin.py (owner) | admin_routes.py, create_admin.py |
 | Compromised app server removing an admin's two-step | Trigger: stego_app cannot turn off or replace an admin's two-step once it is on | supabase_mfa_v4.sql |
-| Unwanted accounts | No public sign-up: only an admin creates accounts; server-generated 16-char one-time password shown once, never logged | admin_routes.py |
+| Throwaway / bot accounts | Self sign-up needs an email address that is **confirmed by a link** before the account works; then **two-step verification is compulsory for everyone** (REQUIRE_MFA_ALL) before any part of the app can be used. Optional admin approval (SIGNUP_REQUIRES_APPROVAL) | auth_routes.py (register, verify-email) |
+| Confirmation link theft / reuse | Random 256-bit token, stored only as SHA-256, single use (claimed atomically), expires in 24 h, a new link cancels the old one; carried in the URL #fragment so it never reaches server logs or Referer headers | auth_routes.py, app.js |
+| Finding out who is registered | Signing up with an address that already has an account gives the same answer as a new sign-up; the owner gets a heads-up email instead | auth_routes.py |
+| Someone signing up with your address | Their account never works without your link; once their link expires, your address is released to you and their account is disabled | auth_routes.py |
+| Using the app to email strangers | "Send a new link" needs the account's password; 3 per hour per IP | auth_routes.py |
+| Sign-up abuse | 3 sign-ups per hour per IP; sign-ups pause while 50 accounts are unconfirmed (MAX_PENDING_SIGNUPS); CSRF header required; a sign-up can only ever be role 'user' (extra fields ignored; DB trigger refuses other roles) | auth_routes.py, supabase_hardening.sql |
+| Mail credentials | Gmail **app password** in .env (not the Gmail password); SMTP with STARTTLS and certificate checks; failures are logged on the server, never shown to the user | mailer.py |
 | Temporary password left in use | `must_change_password`: every app endpoint answers 403 until the user picks their own password | auth_routes.py (require_user) |
 | Normal user doing admin things | Role checked from the database on every request (`require_admin`), not from the token or the UI | auth_routes.py, admin_routes.py |
 | Leaver / compromised account | Admin disables the account: refresh families killed, and the live 15-min access token stops at once (account re-read per request) | admin_routes.py, auth_routes.py |
@@ -44,6 +50,12 @@
 - Turning off two-step for a user signs them out of their refresh sessions, but an access token already issued stays
   valid for up to 15 minutes (same as any JWT).
 - Accounts are never deleted (disable instead), so the table grows; fine at FYP scale.
+- Sign-up says "That username is taken", so usernames (not emails) can be enumerated, 3 tries an hour per IP.
+- No CAPTCHA. Email confirmation + compulsory two-step + rate limits are the gate; a determined attacker with many
+  real inboxes and IPs can still create accounts. SIGNUP_REQUIRES_APPROVAL=true adds a human check;
+  ALLOW_SIGNUP=false closes sign-up.
+- Until someone's unconfirmed sign-up link expires (24 h), the real owner of that address cannot sign up with it.
+- Gmail limits sending to about 500 emails a day.
 - The temporary password reaches the user through the admin (in person or a message), outside the app.
 - The audit log is append-only for the app, so it cannot be shown in the app; read it in the Supabase dashboard (owner).
 - tests/test_users.py runs on SQLite; the Postgres trigger is checked by tests/test_db_privileges.py.
@@ -66,7 +78,13 @@
 1. Add to `.env` (generate it yourself, never share it, back it up; losing it means everyone sets up again):
    `python -c "import secrets,base64;print('MFA_ENCRYPTION_KEY=' + base64.b64encode(secrets.token_bytes(32)).decode())"`
 2. `pip install cryptography segno` (segno draws the QR code; without it the set-up key is shown as text).
-3. Supabase: run supabase_mfa_v4.sql in the SQL editor. SQLite: nothing to do.
+3. Supabase: run supabase_mfa_v4.sql, then supabase_signup_v5.sql, in the SQL editor. SQLite: nothing to do.
+
+### Email (sign-up confirmation)
+1. Gmail account with 2-Step Verification on > Google Account > Security > App passwords > create one.
+2. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=<gmail address>`, `SMTP_PASSWORD=<app password>`,
+   `MAIL_FROM=RobustStego <gmail address>`, `PUBLIC_URL=<address where the UI is opened>`.
+3. Without these, and only with ENV=dev, emails are printed in the server window instead (for local testing).
 4. `python tests/test_mfa.py`, then sign in, open Account, turn it on, save the recovery codes.
 
 ### Accounts

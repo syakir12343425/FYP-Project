@@ -1681,3 +1681,20 @@ body.first-paint #page-home .home-steps { animation-delay: 320ms; }
 /* soft UI refinements after review */
 .read-status, .tech-details { box-shadow: none; }
 .dropzone { background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+
+/* self sign-up (Nov 2026) */
+.login-switch { margin-top: var(--space-4); text-align: center; font-size: var(--text-sm); color: var(--text-2); }
+#signup-form h2, .signup-done h2 { font-size: var(--text-lg); font-weight: 700; }
+#signup-form .field-hint { margin: calc(-1 * var(--space-3)) 0 var(--space-4); }
+.signup-done .login-sub { margin: var(--space-2) 0 var(--space-5); }
+
+/* email sign-up and compulsory two-step (Nov 2026) */
+.login-notice { margin: 0 0 var(--space-4); padding: var(--space-3); border-radius: var(--radius-md); background: var(--success-soft);
+  color: var(--text); font-size: var(--text-sm); }
+#login-resend { margin-bottom: var(--space-2); }
+.user-email { display: block; font-weight: 400; font-size: var(--text-xs); color: var(--text-3); }
+/* while two-step must still be set up, the other pages are not reachable */
+body[data-mfa-setup] .site-nav .site-link:not([data-mode-link="account"]) { display: none; }
+body[data-mfa-setup] .home-results-link { display: none; }
+#mfa-required-note { color: var(--text); font-size: var(--text-sm); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: var(--warning-soft, rgba(234, 179, 8, 0.15)); }
