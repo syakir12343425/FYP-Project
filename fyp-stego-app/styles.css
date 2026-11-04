@@ -1496,3 +1496,188 @@ body[data-mode="account"] .mode-results { display: none; }
 #login-mfa-form h2 { font-size: var(--text-lg); font-weight: 700; }
 #login-mfa-code { font-family: var(--font-mono); letter-spacing: 0.15em; font-size: var(--text-md); }
 @media (max-width: 600px) { .recovery-list { columns: 1; } }
+
+/* =====================================================================================================
+   Soft UI pass (4 Nov 2026): subtle neumorphism + glass, minimal, with a little motion.
+   Principles: depth comes from soft paired shadows, not from more borders; glass only on things that
+   float above content (top bar, dialogs); motion only where something changed or the user acted.
+   Borders on inputs and buttons stay (WCAG 1.4.11: controls need a 3:1 outline).
+   ===================================================================================================== */
+body.dark-theme {
+  --bg: #0d1016;
+  --neu-out: -5px -5px 14px rgba(255, 255, 255, 0.022), 8px 10px 26px rgba(0, 0, 0, 0.55);
+  --neu-out-sm: -3px -3px 8px rgba(255, 255, 255, 0.025), 4px 5px 12px rgba(0, 0, 0, 0.5);
+  --neu-in: inset 3px 3px 8px rgba(0, 0, 0, 0.5), inset -3px -3px 8px rgba(255, 255, 255, 0.025);
+  --neu-in-sm: inset 2px 2px 4px rgba(0, 0, 0, 0.45), inset -1px -1px 3px rgba(255, 255, 255, 0.03);
+  --glass: rgba(16, 19, 26, 0.66);
+  --glass-strong: rgba(18, 21, 28, 0.82);
+  --glass-edge: rgba(255, 255, 255, 0.07);
+  --card-edge: rgba(255, 255, 255, 0.045);
+  --ambient-1: rgba(47, 111, 232, 0.10);
+  --ambient-2: rgba(124, 92, 230, 0.07);
+  --glow-accent: 0 6px 18px -6px rgba(47, 111, 232, 0.55);
+}
+body.light-theme {
+  --bg: #eef1f6;
+  --neu-out: -6px -6px 16px rgba(255, 255, 255, 0.95), 8px 10px 24px rgba(31, 45, 77, 0.10);
+  --neu-out-sm: -3px -3px 8px rgba(255, 255, 255, 0.95), 4px 5px 12px rgba(31, 45, 77, 0.09);
+  --neu-in: inset 3px 3px 8px rgba(31, 45, 77, 0.09), inset -3px -3px 8px rgba(255, 255, 255, 0.95);
+  --neu-in-sm: inset 2px 2px 4px rgba(31, 45, 77, 0.08), inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.84);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --card-edge: rgba(255, 255, 255, 0.9);
+  --ambient-1: rgba(47, 111, 232, 0.09);
+  --ambient-2: rgba(124, 92, 230, 0.06);
+  --glow-accent: 0 6px 16px -6px rgba(47, 111, 232, 0.45);
+}
+:root {
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --radius-xl: 18px;
+}
+
+/* Ambient light behind everything: what the glass blurs. Very faint, drifts slowly. */
+body::before {
+  content: ""; position: fixed; inset: -20vmax; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(40vmax 32vmax at 18% 12%, var(--ambient-1), transparent 70%),
+    radial-gradient(36vmax 30vmax at 85% 78%, var(--ambient-2), transparent 70%);
+  animation: ambient-drift 40s ease-in-out infinite alternate;
+}
+@keyframes ambient-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-3vmax, 2vmax, 0); } }
+
+/* ---- glass: the floating layers ---- */
+.site-header {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid var(--glass-edge);
+}
+.login-overlay { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.login-card {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+.login-overlay.active .login-card:not([hidden]) { animation: rise-in 420ms var(--ease-out) both; }
+
+/* ---- soft surfaces: cards are lifted out of the page, not outlined ---- */
+.control-card, .preview-card, .comparison-card {
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--neu-out);
+}
+.card-header { border-bottom-color: var(--border); }
+.card-icon { background: var(--surface); box-shadow: var(--neu-out-sm); border-radius: 10px; }
+
+/* panels inside a card are pressed in (one level of depth, never a second border) */
+.mini-metric-card, .flat-tip, .stego-input-status, .tech-details, .status-console-card {
+  box-shadow: var(--neu-in-sm);
+}
+
+/* ---- controls ---- */
+.btn { transition: background var(--motion), border-color var(--motion), color var(--motion),
+                   box-shadow 200ms var(--ease-out), transform 120ms var(--ease-out); }
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+/* gradient stays at or darker than --accent, so white text keeps >= 4.6:1 everywhere on the button */
+.btn-primary { background-color: var(--accent); background-image: linear-gradient(180deg, var(--accent), #2763d8); box-shadow: var(--glow-accent); }
+.btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); background-image: linear-gradient(180deg, #2a68de, var(--accent-hover)); box-shadow: 0 8px 22px -6px rgba(47, 111, 232, 0.6); }
+.btn-secondary { box-shadow: var(--neu-out-sm); }
+.btn-secondary:active:not(:disabled) { box-shadow: var(--neu-in-sm); }
+.btn:disabled { box-shadow: none; }
+
+.form-control, .login-card input {
+  box-shadow: var(--neu-in-sm);
+  transition: border-color var(--motion), box-shadow 200ms var(--ease-out);
+}
+.form-control:focus, .login-card input:focus { box-shadow: var(--neu-in-sm), 0 0 0 3px var(--accent-soft); }
+
+/* switches: a pressed track and a raised knob */
+.slider { box-shadow: var(--neu-in-sm); }
+.slider::before { box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); transition: transform 260ms var(--ease-spring); }
+
+/* choice cards (samples, methods, sizes): lift on hover, press when chosen */
+.sample-thumb-btn, .method-card, .home-sample {
+  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out), border-color var(--motion), background var(--motion);
+}
+.sample-thumb-btn:hover, .method-card:hover, .home-sample:hover { transform: translateY(-2px); box-shadow: var(--neu-out-sm); }
+.sample-thumb-btn.active, .method-card.active { transform: none; box-shadow: var(--neu-in-sm), 0 0 0 1px var(--accent); }
+
+/* ---- top bar links: a soft pill that slides between pages ---- */
+.site-link { transition: color var(--motion), background 200ms var(--ease-out); }
+.site-link[aria-current="page"] { box-shadow: var(--neu-in-sm); }
+
+/* ---- Start page ---- */
+.home-tabs { position: relative; background: var(--surface-2); border: 0; box-shadow: var(--neu-in); }
+.home-tab { position: relative; z-index: 1; transition: color 200ms var(--ease-out); }
+.home-tab[aria-selected="true"] { background: none; box-shadow: none; }
+.home-tab-indicator {
+  position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: var(--radius-full);
+  background: var(--surface); box-shadow: var(--neu-out-sm);
+  transition: transform 340ms var(--ease-spring), width 340ms var(--ease-spring);
+}
+.dropzone {
+  border: 2px dashed var(--border-strong); border-radius: 22px; background: var(--surface);
+  box-shadow: var(--neu-in);
+  transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out), transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out);
+}
+.dropzone:hover { border-color: var(--accent); }
+.dropzone:hover .dropzone-icon { transform: translateY(-3px); color: var(--accent-text); }
+.dropzone-icon { transition: transform 300ms var(--ease-spring), color 200ms; }
+.dropzone.dragging { transform: scale(1.012); box-shadow: var(--neu-in), 0 0 0 6px var(--accent-soft); }
+.dropzone.dragging .dropzone-icon { animation: bob 900ms ease-in-out infinite; color: var(--accent-text); }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.read-drop { box-shadow: var(--neu-in); border-radius: var(--radius-lg); }
+.read-drop[data-has-image="true"] { box-shadow: var(--neu-out-sm); }
+.read-drop.dragging { box-shadow: var(--neu-in), 0 0 0 6px var(--accent-soft); }
+.home-steps { border-top-color: transparent; }
+.home-steps li::before { background: var(--surface); box-shadow: var(--neu-out-sm); }
+
+/* one orchestrated entrance, on the Start page's first appearance only */
+body.first-paint #page-home .home-title,
+body.first-paint #page-home .home-sub,
+body.first-paint #page-home .home-tabs,
+body.first-paint #page-home .home-panel,
+body.first-paint #page-home .home-steps { animation: rise-in 560ms var(--ease-out) both; }
+body.first-paint #page-home .home-sub   { animation-delay: 70ms; }
+body.first-paint #page-home .home-tabs  { animation-delay: 140ms; }
+body.first-paint #page-home .home-panel { animation-delay: 210ms; }
+body.first-paint #page-home .home-steps { animation-delay: 320ms; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* page change: a short fade-and-settle so you see that the view changed */
+.viewport.active { animation: page-in 280ms var(--ease-out); }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* results appear with a small pop, once per new result (class added by app.js) */
+.reveal { animation: reveal 420ms var(--ease-spring); }
+@keyframes reveal { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* status pills and tables */
+.status-pill { box-shadow: var(--neu-out-sm); }
+.users-table tbody tr { transition: background 160ms; }
+.users-table tbody tr:hover { background: var(--surface-2); }
+.temp-password, .ber-hero { border-radius: var(--radius-lg); }
+
+/* site footer sits on the page, not in a box */
+.site-footer { border-top-color: transparent; }
+
+/* while the server works: the busy button breathes */
+.btn[aria-busy="true"], .btn.is-busy { animation: breathe 1.4s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .home-tab-indicator { transition: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header { background: var(--surface); }
+  .login-card { background: var(--surface); }
+}
+/* soft UI refinements after review */
+.read-status, .tech-details { box-shadow: none; }
+.dropzone { background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }

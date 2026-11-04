@@ -124,6 +124,12 @@ function setSession(data) {
   document.getElementById('current-user').innerText = data.username;
   document.body.dataset.role = session.role;
   document.getElementById('login-overlay').classList.remove('active');
+  // The Start page entrance plays once, when the app first opens for a signed-in person.
+  if (!document.body.dataset.painted && document.body.dataset.mode === 'home') {
+    document.body.dataset.painted = '1';
+    document.body.classList.add('first-paint');
+    setTimeout(() => document.body.classList.remove('first-paint'), 1200);
+  }
   if (session.mustChange) openPasswordDialog(true);
   else if (session.role !== 'admin' && document.body.dataset.mode === 'users') handleNavigation('page-home');
   if (document.body.dataset.mode === 'account') loadMfaStatus();
@@ -443,7 +449,8 @@ function initMfaPanels() {
       document.getElementById('mfa-setup-password').value = '';
       document.getElementById('mfa-secret').textContent = r.secret.match(/.{1,4}/g).join(' ');
       const qr = document.getElementById('mfa-qr');
-      if (r.qr_svg) { qr.src = 'data:image/svg+xml;base64,' + btoa(r.qr_svg); qr.hidden = false; }  // <img>: an SVG here cannot run scripts
+      // Only an SVG data URI is accepted, and only into an <img>, where an SVG cannot run scripts.
+      if (typeof r.qr_data_uri === 'string' && r.qr_data_uri.startsWith('data:image/svg+xml')) { qr.src = r.qr_data_uri; qr.hidden = false; }
       else qr.hidden = true;
       showOnly('mfa-step-scan');
       document.getElementById('mfa-enable-code').focus();
@@ -767,6 +774,7 @@ const pageMode = (id) => (id === 'page-home' ? 'home' : id === 'page-read' ? 're
   : id === 'page-results' ? 'results' : id === 'page-users' ? 'users' : id === 'page-account' ? 'account' : 'hide');
 
 function handleNavigation(targetId) {
+  if (targetId === 'page-home') requestAnimationFrame(moveTabIndicator);
   if (targetId === 'page-users') {
     if (session.role !== 'admin') targetId = 'page-home';
     else loadUsers();
@@ -1761,6 +1769,30 @@ function updateAcademicSummaryParagraph() {
 }
 
 // Initialize Application Events
+// Soft UI motion (4 Nov 2026) -------------------------------------------------------------
+// The sliding pill behind the selected Start tab.
+function moveTabIndicator() {
+  const ind = document.querySelector('.home-tab-indicator');
+  const tab = document.querySelector('.home-tab[aria-selected="true"]');
+  if (!ind || !tab || !tab.offsetWidth) return;
+  ind.style.width = `${tab.offsetWidth}px`;
+  ind.style.transform = `translateX(${tab.offsetLeft}px)`;
+}
+
+// A result card pops in once each time its state changes (pass / fail / ok / failed), so a new answer is
+// noticed. Watches data-state instead of touching every place that sets it.
+function initRevealOnStateChange() {
+  const watch = document.querySelectorAll('.ber-hero, #ecc-status, [data-state]');
+  const obs = new MutationObserver(muts => muts.forEach(m => {
+    const el = m.target;
+    if (['idle', 'na', 'empty'].includes(el.dataset.state)) return;
+    el.classList.remove('reveal');
+    void el.offsetWidth;                 // restart the animation
+    el.classList.add('reveal');
+  }));
+  watch.forEach(el => obs.observe(el, { attributes: true, attributeFilter: ['data-state'] }));
+}
+
 // Start page, online-tool style (3 Nov 2026): choose Hide or Read, then drop a photo.
 // The file is handed to the existing upload inputs, so validation and processing stay in one place.
 function initHomeTool() {
@@ -1781,6 +1813,7 @@ function initHomeTool() {
       if (on) { panel.setAttribute('aria-labelledby', t.id); if (focus) t.focus(); }
     });
     panel.dataset.tab = name;
+    moveTabIndicator();
     const [title, sub, btn] = TEXT[name];
     document.getElementById('home-drop-title').textContent = title;
     document.getElementById('home-drop-sub').textContent = sub;
@@ -1832,6 +1865,11 @@ function initHomeTool() {
 function initApp() {
   initReadFlow();
   initHomeTool();
+  initRevealOnStateChange();
+  requestAnimationFrame(moveTabIndicator);
+  window.addEventListener('resize', moveTabIndicator);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveTabIndicator);
+
   initAccounts();
   renderResultsPage();
   document.querySelectorAll('.bench-tab').forEach(b => b.addEventListener('click', () => setBenchTab(b.dataset.benchTab)));

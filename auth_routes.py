@@ -18,7 +18,7 @@ from db import AdminUser, MfaRecoveryCode, RefreshToken, RevokedFamily, User, au
 from security import (DUMMY_HASH, create_access_token, create_mfa_token, decode_access_token, decode_mfa_token,
                       decrypt_mfa_secret, encrypt_mfa_secret, hash_password, hash_recovery_code,
                       hash_refresh_token, new_recovery_codes, new_refresh_token, normalise_recovery_code,
-                      otpauth_uri, password_problem, qr_svg, totp_new_secret, totp_verify, verify_password)
+                      otpauth_uri, password_problem, qr_data_uri, totp_new_secret, totp_verify, verify_password)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -373,7 +373,7 @@ def mfa_setup(request: Request, body: PasswordConfirm, user: User = Depends(requ
     db.commit()
     audit(db, "mfa_setup_started", request, user.username)
     uri = otpauth_uri(secret, user.username)
-    return {"secret": secret, "otpauth_uri": uri, "qr_svg": qr_svg(uri)}
+    return {"secret": secret, "otpauth_uri": uri, "qr_data_uri": qr_data_uri(uri)}
 
 
 @router.post("/mfa/enable")

@@ -64,12 +64,14 @@ def decode_mfa_token(token: str) -> dict:
     return data
 
 
-def qr_svg(text: str) -> str | None:
-    """QR code as SVG text for the set-up screen (needs `pip install segno`). None if segno is missing:
-    the UI then shows the secret for typing into the app by hand."""
+def qr_data_uri(text: str) -> str | None:
+    """QR code for the set-up screen as a complete SVG data URI for an <img> (needs `pip install segno`).
+    (svg_inline() was wrong here: it leaves out the SVG namespace, so it renders inline but not as an image.)
+    None if segno is missing: the UI then shows only the key for typing into the app by hand."""
     try:
         import segno
-        return segno.make(text, error="m").svg_inline(scale=5, border=2, dark="#000000", light="#ffffff")
+        uri = segno.make(text, error="m").svg_data_uri(scale=5, border=2, dark="#000000", light="#ffffff")
+        return uri if uri.startswith("data:image/svg+xml") else None
     except Exception:
         return None
 
