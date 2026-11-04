@@ -9,7 +9,10 @@
 
 // Point this at wherever server.py is running (uvicorn server:app --port 8000).
 // Change to your VPS address once you deploy it there, e.g. "https://api.yourdomain.com".
-const API_BASE = "http://localhost:8000"; // use your HTTPS API domain on the VPS
+// Local development: UI on :8080, API on :8000. Deployed: Caddy serves the UI and the API on ONE https origin,
+// so requests go to the same site ('' = relative URLs) and the cookie stays first-party.
+const API_BASE = (['localhost', '127.0.0.1'].includes(location.hostname) && location.port === '8080')
+  ? `http://${location.hostname}:8000` : '';
 
 // Real aggregate numbers, all four methods from ONE tool and the same attacks (3 Nov 2026):
 // tools/benchmark_methods.py --images data/DIV2K_valid_HR --limit 100
@@ -120,7 +123,7 @@ let session = { username: '', role: 'user', mustChange: false, mfaEnabled: false
 function setSession(data) {
   accessToken = data.access_token;
   session = { username: data.username, role: data.role || 'user', mustChange: Boolean(data.must_change_password),
-              mfaEnabled: Boolean(data.mfa_enabled), mfaRequired: Boolean(data.mfa_required) };
+              mfaEnabled: Boolean(data.mfa_enabled), mfaRequired: Boolean(data.mfa_mandatory) };
   showLoginNotice('');
   document.getElementById('login-resend').hidden = true;
   // Two-step verification is compulsory: until it is on, only the Account page is available.
@@ -574,7 +577,8 @@ async function handleLogin(e) {
     if (!res.ok) throw new Error("Invalid credentials, or account temporarily locked.");
     document.getElementById('login-password').value = '';
     const data = await res.json();
-    if (data.mfa_required) showMfaLoginStep(data.mfa_token);
+    // Code step only when the server actually issued a code-step token (the account HAS two-step on).
+    if (data.mfa_required && data.mfa_token) showMfaLoginStep(data.mfa_token);
     else setSession(data);
   } catch (err) {
     errEl.innerText = err instanceof TypeError ? describeFetchError(err) : err.message;

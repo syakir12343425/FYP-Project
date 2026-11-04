@@ -1698,3 +1698,7 @@ body[data-mfa-setup] .site-nav .site-link:not([data-mode-link="account"]) { disp
 body[data-mfa-setup] .home-results-link { display: none; }
 #mfa-required-note { color: var(--text); font-size: var(--text-sm); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
   background: var(--warning-soft, rgba(234, 179, 8, 0.15)); }
+
+/* Inline style="" attributes were removed so a strict Content-Security-Policy (no 'unsafe-inline') can be used
+   when deployed. Bars start empty here; app.js still sets their width through element.style (allowed by CSP). */
+#psnr-bar, #ssim-bar, #attack-progress-fill { width: 0%; }

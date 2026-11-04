@@ -46,7 +46,7 @@ USERS = [{"id": 1, "username": "ADMIN", "role": "admin", "disabled": False, "loc
           "pending_approval": True, "created_at": "2026-11-04T01:00:00+00:00", "last_login_at": None}]
 def sess():
     return {"access_token": "t", "expires_in": 900, "username": "ADMIN" if ROLE == "admin" else "student1", "role": ROLE,
-            "must_change_password": MUST, "mfa_enabled": MFA, "mfa_required": True}
+            "must_change_password": MUST, "mfa_enabled": MFA, "mfa_mandatory": True}
 RC = ["k7m2q-9xwpr", "a3bcd-efgh2", "pq4rs-tuvw5", "xy6za-bcde7", "fg8hj-kmnp9", "qr2st-uvwx3", "yz4ab-cdef5", "gh6jk-mnpq7", "rs8tu-vwxy9", "za2bc-defg3"]
 
 class H(BaseHTTPRequestHandler):

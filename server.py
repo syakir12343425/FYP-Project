@@ -18,6 +18,7 @@ Then point the frontend's fetch() calls at http://<this machine's address>:8000/
 """
 import base64
 import io
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -78,7 +79,10 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-MAX_BODY_BYTES = 12 * 1024 * 1024   # largest legit request = two ~512px PNG data URLs
+MAX_BODY_BYTES = 12 * 1024 * 1024
+UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; "
+          "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
+          "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")   # largest legit request = two ~512px PNG data URLs
 
 
 @app.middleware("http")
@@ -91,8 +95,15 @@ async def security_middleware(request: Request, call_next):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
-    resp.headers["Cache-Control"] = "no-store"
-    resp.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    if request.url.path.startswith("/api/") or request.url.path in ("/docs", "/openapi.json"):
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    else:
+        # The web app (served below when SERVE_UI is on). Strict: no inline scripts or styles anywhere.
+        resp.headers["Content-Security-Policy"] = UI_CSP
+        resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Cache-Control"] = "no-cache"          # always revalidate, so updates show up at once
     if config.COOKIE_SECURE:
         resp.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return resp
@@ -331,3 +342,13 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
         extracted_psnr=extracted_psnr,
         extracted_ssim=extracted_ssim,
     )
+
+
+# ---------------------------------------------------------------- the web app (one origin with the API)
+# With SERVE_UI=true (default) this server also serves fyp-stego-app/, so a single address (e.g. the Tailscale
+# Funnel URL) carries both the app and the API: no CORS, first-party cookies. Mounted LAST so /api/* wins.
+# Only that folder is reachable; Starlette refuses paths that climb out of it (../).
+if config.SERVE_UI:
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=str(Path(__file__).resolve().parent / "fyp-stego-app"), html=True), name="ui")
+

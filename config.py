@@ -53,3 +53,7 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 MAIL_FROM = os.getenv("MAIL_FROM", "")
 PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8080").rstrip("/")
+
+# Serve the web app from this server too (one address for app + API; used with Tailscale Funnel). Set false when
+# a separate web server (e.g. Caddy) serves fyp-stego-app/.
+SERVE_UI = os.getenv("SERVE_UI", "true").lower() == "true"

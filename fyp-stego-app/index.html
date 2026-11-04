@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
-  <link rel="stylesheet" href="styles.css?v=20261104c">
+  <link rel="stylesheet" href="styles.css?v=20261104e">
 </head>
 <body class="dark-theme hide-academic-figures" data-mode="home">
 
@@ -427,7 +427,7 @@
               <div class="stego-input-status read-status">
                 <span id="read-import-status">No image yet.</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-read-upload">Upload image</button>
-                <input type="file" id="read-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+                <input type="file" id="read-file-input" accept="image/png,image/jpeg,image/webp" hidden>
               </div>
             </div>
 
@@ -502,7 +502,7 @@
                   <div class="image-source-options">
                     <button type="button" class="source-btn active" id="btn-use-sample" aria-pressed="true">Sample image</button>
                     <button type="button" class="source-btn" id="btn-trigger-upload" aria-pressed="false">Upload your own</button>
-                    <input type="file" id="cover-file-input" accept="image/*" style="display: none;">
+                    <input type="file" id="cover-file-input" accept="image/*" hidden>
                   </div>
                   
                   <div class="sample-selection">
@@ -715,7 +715,7 @@
                     <span class="metric-val" id="metric-psnr">--</span>
                   </div>
                   <div class="metric-gauge">
-                    <div class="gauge-bar" id="psnr-bar" style="width: 0%;"></div>
+                    <div class="gauge-bar" id="psnr-bar"></div>
                     <span class="gauge-target" data-target-for="psnr" title="Project target"></span>
                   </div>
                   <div class="metric-desc">Higher means less visible change. Project target: 35 dB.</div>
@@ -728,7 +728,7 @@
                     <span class="metric-val" id="metric-ssim">--</span>
                   </div>
                   <div class="metric-gauge">
-                    <div class="gauge-bar" id="ssim-bar" style="width: 0%;"></div>
+                    <div class="gauge-bar" id="ssim-bar"></div>
                     <span class="gauge-target" data-target-for="ssim" title="Project target"></span>
                   </div>
                   <div class="metric-desc">1.0 means structurally identical. Project target: 0.95.</div>
@@ -805,7 +805,7 @@
                     </div>
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-import-latest">Use image from step 2</button>
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-stego">Upload image</button>
-                    <input type="file" id="stego-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+                    <input type="file" id="stego-file-input" accept="image/png,image/jpeg,image/webp" hidden>
                   </div>
                 </div>
 
@@ -944,7 +944,7 @@
                     <span id="progress-percentage"></span>
                   </div>
                   <div class="progress-bar-track" id="attack-progress-track" role="progressbar" aria-label="Attack progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                    <div class="progress-bar-fill" id="attack-progress-fill" style="width: 0%;"></div>
+                    <div class="progress-bar-fill" id="attack-progress-fill"></div>
                   </div>
                 </div>
 
@@ -1004,7 +1004,7 @@
                   </div>
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-import-attacked">Use image from step 3</button>
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-attacked">Upload image</button>
-                  <input type="file" id="attacked-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+                  <input type="file" id="attacked-file-input" accept="image/png,image/jpeg,image/webp" hidden>
                 </div>
 
                 <div class="form-section">
@@ -1283,6 +1283,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261104c"></script>
+  <script src="app.js?v=20261104e"></script>
 </body>
 </html>

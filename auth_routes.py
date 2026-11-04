@@ -74,7 +74,7 @@ def session_body(user: User) -> dict:
     return {"access_token": create_access_token(user.id, user.username), "token_type": "bearer",
             "expires_in": config.ACCESS_TTL_MIN * 60, "username": user.username,
             "role": user.role, "must_change_password": user.must_change_password,
-            "mfa_enabled": user.mfa_enabled, "mfa_required": mfa_required_for(user)}
+            "mfa_enabled": user.mfa_enabled, "mfa_mandatory": mfa_required_for(user)}
 
 
 def mfa_required_for(user: User) -> bool:
@@ -176,6 +176,7 @@ def login(request: Request, body: LoginRequest, response: Response, db: Session 
         # Password right, second step still to come. No session yet; the failure counter is NOT reset,
         # so wrong codes keep counting towards the lockout.
         audit(db, "login_password_ok_mfa_pending", request, user.username)
+        # "mfa_required" = enter your code now. (The site-wide rule is a different field: "mfa_mandatory".)
         return {"mfa_required": True, "mfa_token": create_mfa_token(user.id)}
 
     user.failed_attempts, user.locked_until, user.last_login_at = 0, None, now
@@ -367,7 +368,7 @@ def require_admin(user: User = Depends(require_user)) -> User:
 @router.get("/me")
 def me(user: User = Depends(require_session_user)):
     return {"username": user.username, "role": user.role, "must_change_password": user.must_change_password,
-            "mfa_enabled": user.mfa_enabled, "mfa_required": mfa_required_for(user)}
+            "mfa_enabled": user.mfa_enabled, "mfa_mandatory": mfa_required_for(user)}
 
 
 @router.post("/change-password")

@@ -133,7 +133,9 @@ def main():
     cu = TestClient(app)
     r = post(cu, "/api/auth/login", {"username": "nadia", "password": PW})
     utok = r.json().get("access_token")
-    check("sign-in works, response says two-step is required", r.status_code == 200 and r.json()["mfa_required"] is True, r.text)
+    check("sign-in gives a session (no code step: no authenticator yet) and says two-step is mandatory",
+          r.status_code == 200 and "access_token" in r.json() and not r.json().get("mfa_required")
+          and r.json()["mfa_mandatory"] is True, r.text)
     r = get(cu, "/api/protected", utok)
     check("app refused until two-step is on (403)", r.status_code == 403 and "two-step" in r.text, r.text)
     check("but the two-step status/set-up pages work", get(cu, "/api/auth/mfa/status", utok).status_code == 200)

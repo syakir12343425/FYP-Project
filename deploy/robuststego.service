@@ -1,0 +1,46 @@
+# systemd unit for the RobustStego API. Install: sudo cp deploy/robuststego.service /etc/systemd/system/
+[Unit]
+Description=RobustStego API (FastAPI + PyTorch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stego
+Group=stego
+WorkingDirectory=/opt/robuststego/app
+Environment=HOME=/opt/robuststego/home
+Environment=PYTHONUNBUFFERED=1
+# Listens on localhost only: the internet reaches it through Caddy. --proxy-headers + only trusting 127.0.0.1
+# makes request.client.host the real visitor IP (needed for the rate limits and the audit log).
+ExecStart=/opt/robuststego/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1 \
+          --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+Restart=on-failure
+RestartSec=5
+MemoryMax=2800M
+
+# Sandbox: the service can read its code and write only its own home folder.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/robuststego/home
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
