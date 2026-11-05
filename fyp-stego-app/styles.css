@@ -1702,3 +1702,43 @@ body[data-mfa-setup] .home-results-link { display: none; }
 /* Inline style="" attributes were removed so a strict Content-Security-Policy (no 'unsafe-inline') can be used
    when deployed. Bars start empty here; app.js still sets their width through element.style (allowed by CSP). */
 #psnr-bar, #ssim-bar, #attack-progress-fill { width: 0%; }
+
+/* ---- password fields: show/hide button and live rules (Nov 2026) ---- */
+.pw-field { position: relative; }
+.login-card .pw-field { margin-bottom: var(--space-4); }
+.login-card .pw-field input { margin-bottom: 0; }
+.pw-field input { width: 100%; padding-right: 44px; }
+.pw-toggle {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 36px; height: 36px; display: grid; place-items: center;
+  border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-3); cursor: pointer;
+  transition: color var(--motion), background var(--motion);
+}
+.pw-toggle:hover { color: var(--text); background: var(--surface-2); }
+.pw-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pw-toggle svg { width: 18px; height: 18px; }
+.pw-toggle[aria-pressed="true"] { color: var(--accent-text); }
+/* hide the browser's own reveal icon (Edge) so there is only one */
+input[type="password"]::-ms-reveal, input[type="password"]::-ms-clear { display: none; }
+
+.pw-rules { margin: calc(-1 * var(--space-2)) 0 var(--space-4); font-size: var(--text-xs); color: var(--text-3); }
+.pw-meter { height: 4px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; margin-bottom: var(--space-2); }
+.pw-meter span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--danger);
+  transition: width 280ms var(--ease-out, ease), background 280ms; }
+.pw-meter[data-level="3"] span, .pw-meter[data-level="4"] span { background: var(--warning); }
+.pw-meter[data-level="5"] span { background: var(--success); }
+.pw-rule-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2px var(--space-3); }
+.pw-rule-list li { display: flex; align-items: center; gap: 6px; line-height: 1.5; transition: color 200ms; }
+.pw-mark { width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--border-strong);
+  display: grid; place-items: center; transition: background 200ms, border-color 200ms, transform 260ms var(--ease-spring, ease); }
+.pw-rule-list li[data-state="ok"] { color: var(--success); }
+.pw-rule-list li[data-state="ok"] .pw-mark { background: var(--success); border-color: var(--success); transform: scale(1.05); }
+.pw-rule-list li[data-state="ok"] .pw-mark::after { content: ""; width: 6px; height: 3px; margin-top: -1px;
+  border-left: 1.5px solid var(--surface); border-bottom: 1.5px solid var(--surface); transform: rotate(-45deg); }
+.pw-rule-list li[data-state="bad"] { color: var(--text-2); }
+.pw-rule-list li[data-state="bad"] .pw-mark { border-color: var(--danger); }
+.pw-too-long { margin-top: var(--space-1); color: var(--danger); }
+.pw-match { min-height: 1.2em; margin: calc(-1 * var(--space-3)) 0 var(--space-3); font-size: var(--text-xs); }
+.pw-match[data-state="ok"] { color: var(--success); }
+.pw-match[data-state="bad"] { color: var(--danger); }
+@media (max-width: 420px) { .pw-rule-list { grid-template-columns: 1fr; } }

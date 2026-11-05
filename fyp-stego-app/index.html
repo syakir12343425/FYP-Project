@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
-  <link rel="stylesheet" href="styles.css?v=20261104e">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=20261105a">
 </head>
 <body class="dark-theme hide-academic-figures" data-mode="home">
 
@@ -40,9 +41,10 @@
       <p class="field-hint" id="signup-username-hint">3 to 32 characters: letters, digits, dot, dash or underscore.</p>
       <label for="signup-password">Password</label>
       <input id="signup-password" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="signup-password-hint">
-      <p class="field-hint" id="signup-password-hint">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</p>
+      <div class="pw-rules" id="signup-password-hint" data-rules-for="signup-password" data-username-from="signup-username" data-repeat="signup-repeat">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</div>
       <label for="signup-repeat">Repeat password</label>
-      <input id="signup-repeat" type="password" autocomplete="new-password" maxlength="128" required>
+      <input id="signup-repeat" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="signup-repeat-status">
+      <p class="pw-match" id="signup-repeat-status" aria-live="polite"></p>
       <div class="login-error" id="signup-error" role="alert"></div>
       <button type="submit" class="btn btn-primary w-full" id="signup-submit">Create account</button>
       <p class="login-switch">Already have an account? <button type="button" class="link-btn" id="show-login">Sign in</button></p>
@@ -74,9 +76,10 @@
       <input id="password-current" type="password" autocomplete="current-password" maxlength="128" required>
       <label for="password-new">New password</label>
       <input id="password-new" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="password-rules">
-      <p class="field-hint" id="password-rules">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</p>
+      <div class="pw-rules" id="password-rules" data-rules-for="password-new" data-username-from="password-username" data-repeat="password-repeat">At least 12 characters with upper case, lower case, a digit and a symbol. Not your username.</div>
       <label for="password-repeat">Repeat new password</label>
-      <input id="password-repeat" type="password" autocomplete="new-password" maxlength="128" required>
+      <input id="password-repeat" type="password" autocomplete="new-password" maxlength="128" required aria-describedby="password-repeat-status">
+      <p class="pw-match" id="password-repeat-status" aria-live="polite"></p>
       <div class="login-error" id="password-error" role="alert"></div>
       <button type="submit" class="btn btn-primary w-full" id="password-submit">Save new password</button>
       <div class="password-secondary">
@@ -1283,6 +1286,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261104e"></script>
+  <script src="app.js?v=20261105a"></script>
 </body>
 </html>

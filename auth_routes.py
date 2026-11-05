@@ -1,6 +1,7 @@
 """/api/auth/*  — login (+ two-step code), refresh (rotating, reuse-detecting), logout, me, change-password,
 two-step verification set-up / turn off / new recovery codes."""
 import hashlib
+import os
 import re
 import secrets
 import uuid
@@ -24,7 +25,9 @@ from security import (DUMMY_HASH, create_access_token, create_mfa_token, decode_
                       hash_refresh_token, new_recovery_codes, new_refresh_token, normalise_recovery_code,
                       otpauth_uri, password_problem, qr_data_uri, totp_new_secret, totp_verify, verify_password)
 
-limiter = Limiter(key_func=get_remote_address)
+# DISABLE_RATE_LIMITS=true works only with ENV=dev (e.g. to let sqlmap run locally); never in production.
+limiter = Limiter(key_func=get_remote_address,
+                  enabled=not (config.ENV == "dev" and os.getenv("DISABLE_RATE_LIMITS", "").lower() == "true"))
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
 COOKIE = "refresh_token"

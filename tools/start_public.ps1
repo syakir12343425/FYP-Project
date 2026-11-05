@@ -25,8 +25,14 @@ foreach ($line in Get-Content .env) {
 $problems = @()
 if ($cfg["ENV"] -ne "prod") { $problems += "ENV=prod (closes /docs and the dev email fallback)" }
 if ($cfg["COOKIE_SECURE"] -ne "true") { $problems += "COOKIE_SECURE=true (cookie only over HTTPS)" }
-if (-not ($cfg["PUBLIC_URL"] -like "https://*.ts.net")) { $problems += "PUBLIC_URL=https://<your-laptop>.<tailnet>.ts.net" }
-if (-not ($cfg["ALLOWED_ORIGINS"] -like "*https://*.ts.net*")) { $problems += "ALLOWED_ORIGINS must include the same https://...ts.net address" }
+# The exact public address comes from Tailscale itself, so a typo or a missing part is caught here.
+$dnsName = $null
+try { $dnsName = ((& $ts status --json | ConvertFrom-Json).Self.DNSName).TrimEnd('.') } catch { }
+$expected = if ($dnsName) { "https://$dnsName" } else { $null }
+if ($expected -and $cfg["PUBLIC_URL"] -ne $expected) { $problems += "PUBLIC_URL=$expected   (exactly this; no / at the end)" }
+elseif (-not ($cfg["PUBLIC_URL"] -match '^https://[^/]+\.[^/]+\.ts\.net$')) { $problems += "PUBLIC_URL=https://<your-laptop>.<tailnet>.ts.net" }
+$origins = @(($cfg["ALLOWED_ORIGINS"] -split ',') | ForEach-Object { $_.Trim() })
+if ($origins -notcontains $cfg["PUBLIC_URL"]) { $problems += "ALLOWED_ORIGINS must contain exactly the PUBLIC_URL address" }
 if (-not $cfg["SMTP_PASSWORD"]) { $problems += "SMTP_* settings (sign-up emails cannot be sent without them)" }
 if ($problems.Count -gt 0) {
     Write-Host "Fix these lines in .env first:" -ForegroundColor Red

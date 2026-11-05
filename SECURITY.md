@@ -113,3 +113,24 @@ Owner credentials are only for setup/admin tasks (creating or resetting the admi
 
 ### Production (VPS)
 Serve the frontend on the origin listed in ALLOWED_ORIGINS. Put Caddy/Nginx in front for HTTPS, set COOKIE_SECURE=true, ENV=prod, and update API_BASE in app.js + ALLOWED_ORIGINS.
+
+
+## Security review, 4 Nov 2026 (deployment via Tailscale Funnel)
+
+**Code review**
+| Area | Finding | Status |
+|---|---|---|
+| SQL injection | Every query uses SQLAlchemy with bound parameters. The only hand-built SQL (db.py migration) uses fixed column names from the code, never user input. | No issue |
+| Request bodies | Size was checked only via Content-Length; a chunked upload has none and could be large. | Fixed: ASGI middleware counts the actual bytes (413 over 12 MB) |
+| Error messages | FastAPI's default 422 echoed the submitted value (e.g. an over-long password) back in the response. | Fixed: only field and reason are returned |
+| HTML output | Five innerHTML uses render only fixed text and numbers; recovered messages, usernames and emails always use textContent. The error-correction byte count from the server is now forced to a number first. | Hardened |
+| Public files | With the server serving the web app, everything in fyp-stego-app/ is public; a .bat launcher was in it. | Fixed: moved out; folder holds only web files |
+| Inline styles | Blocked a strict CSP. | Fixed: removed; CSP has no 'unsafe-inline' |
+| Server banner | uvicorn announces itself in the Server header unless started with --no-server-header. | Fixed in start_public.ps1; add the flag to run_server.bat too |
+| Model file | torch.load of the local checkpoint (pickle). Not user-supplied, so not reachable by an attacker. | Accepted |
+| Dependencies | requirements files are not version-pinned. | Recommended: `pip install pip-audit` then `pip-audit` before demos |
+
+**Black-box test**: `python tools/security_check.py https://<public address>` (headers, closed doors and path
+traversal, SQL injection incl. time-based payloads, access control with forged / alg=none tokens, CSRF, oversized
+bodies, rate limiting). For a full sqlmap run, use a LOCAL server with `ENV=dev` and `DISABLE_RATE_LIMITS=true`
+(refused in production) so sqlmap is not slowed to 5 requests a minute.

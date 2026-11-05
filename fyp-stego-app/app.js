@@ -239,6 +239,7 @@ function openPasswordDialog(forced) {
     : 'Other devices where you are signed in will be signed out.';
   document.getElementById('password-current-label').textContent = forced ? 'One-time password' : 'Current password';
   document.getElementById('password-username').value = session.username;
+  refreshPasswordRules();
   document.getElementById('password-error').textContent = '';
   ov.classList.add('active');
   document.getElementById('password-current').focus();
@@ -248,6 +249,7 @@ function closePasswordDialog() {
   const ov = document.getElementById('password-overlay');
   ov.classList.remove('active');
   ['password-current', 'password-new', 'password-repeat'].forEach(id => { document.getElementById(id).value = ''; });
+  refreshPasswordRules();
 }
 
 async function handlePasswordChange(e) {
@@ -536,6 +538,8 @@ function initMfaPanels() {
 }
 
 function initAccounts() {
+  addRevealButtons();
+  initPasswordRules();
   initMfaPanels();
   initSignup();
   document.getElementById('login-mfa-form').addEventListener('submit', handleMfaLogin);
@@ -600,6 +604,7 @@ function showMfaLoginStep(token) {
 }
 
 function showLoginCard(id) {
+  document.querySelectorAll('.login-card input').forEach(i => i.hidePassword && i.hidePassword());
   ['login-form', 'login-mfa-form', 'signup-form', 'signup-done'].forEach(x => { document.getElementById(x).hidden = x !== id; });
 }
 
@@ -649,6 +654,7 @@ async function handleSignup(e) {
     if (res.status === 429) throw new Error('Too many sign-ups from this network. Try again in an hour.');
     if (!res.ok) throw new Error(await errorDetail(res, 'Could not send the request.'));
     ['signup-email', 'signup-username', 'signup-password', 'signup-repeat'].forEach(id => { document.getElementById(id).value = ''; });
+  refreshPasswordRules();
     showLoginCard('signup-done');
     document.getElementById('signup-done-back').focus();
   } catch (ex) {
@@ -678,6 +684,127 @@ async function handleVerifyLink() {
   } catch (ex) {
     document.getElementById('login-error').textContent = ex instanceof TypeError ? describeFetchError(ex) : ex.message;
   }
+}
+
+// ------------------------------------------------------------ password fields: show/hide + live rules
+const EYE = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+
+// Wraps every password input with an eye button. The button only switches the input between type
+// "password" and "text"; the value never leaves the field. Hidden again when the form is sent or reset.
+function addRevealButtons() {
+  document.querySelectorAll('input[type="password"]').forEach(input => {
+    if (input.closest('.pw-field')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'pw-field';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pw-toggle';
+    btn.setAttribute('aria-controls', input.id);
+    wrap.appendChild(btn);
+    const set = (show) => {
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;           // fixed icon markup only, never user text
+      btn.setAttribute('aria-pressed', String(show));
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      btn.title = show ? 'Hide password' : 'Show password';
+    };
+    set(false);
+    btn.addEventListener('click', () => {
+      const pos = input.selectionStart;
+      set(input.type === 'password');
+      input.focus();
+      try { input.setSelectionRange(pos, pos); } catch (_) { /* keep the cursor where it was */ }
+    });
+    const form = input.form;
+    if (form) {
+      form.addEventListener('submit', () => set(false));
+      form.addEventListener('reset', () => set(false));
+    }
+    input.hidePassword = () => set(false);
+  });
+}
+
+// The SAME rules the server checks (security.password_problem), so a green list means the server will accept it.
+const PW_RULES = [
+  { key: 'len',   text: 'At least 12 characters',             test: (pw) => pw.length >= 12 },
+  { key: 'case',  text: 'Upper and lower case letters',       test: (pw) => /[a-z]/.test(pw) && /[A-Z]/.test(pw) },
+  { key: 'digit', text: 'A number',                           test: (pw) => /\d/.test(pw) },
+  { key: 'sym',   text: 'A symbol, like ! ? # or -',         test: (pw) => /[^\p{L}\p{N}_\s]/u.test(pw) },
+  { key: 'user',  text: 'Does not contain your username',     test: (pw, user) => !user || !pw.toLowerCase().includes(user.toLowerCase()) },
+];
+const MAX_PW_BYTES = 72;   // bcrypt ignores anything longer
+
+function passwordProblems(pw, user) {
+  const failed = PW_RULES.filter(r => !r.test(pw, user)).map(r => r.key);
+  if (new TextEncoder().encode(pw).length > MAX_PW_BYTES) failed.push('long');
+  return failed;
+}
+
+function initPasswordRules() {
+  document.querySelectorAll('.pw-rules[data-rules-for]').forEach(box => {
+    const input = document.getElementById(box.dataset.rulesFor);
+    const userEl = document.getElementById(box.dataset.usernameFrom);
+    const repeat = document.getElementById(box.dataset.repeat);
+    const matchEl = repeat ? document.getElementById(repeat.getAttribute('aria-describedby')) : null;
+    const list = document.createElement('ul');
+    list.className = 'pw-rule-list';
+    const items = {};
+    PW_RULES.forEach(r => {
+      const li = document.createElement('li');
+      li.dataset.state = 'todo';
+      const mark = document.createElement('span'); mark.className = 'pw-mark'; mark.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span'); label.textContent = r.text;
+      const sr = document.createElement('span'); sr.className = 'sr-only';
+      li.append(mark, label, sr);
+      items[r.key] = { li, sr };
+      list.appendChild(li);
+    });
+    const tooLong = document.createElement('p');
+    tooLong.className = 'pw-too-long'; tooLong.hidden = true;
+    tooLong.textContent = 'Too long: at most 72 bytes (letters with accents or emoji count as more than one).';
+    const meter = document.createElement('div');
+    meter.className = 'pw-meter'; meter.setAttribute('aria-hidden', 'true');
+    meter.appendChild(document.createElement('span'));
+    box.replaceChildren(meter, list, tooLong);
+
+    const update = () => {
+      const pw = input.value;
+      const user = userEl ? userEl.value.trim() : '';
+      const failed = passwordProblems(pw, user);
+      PW_RULES.forEach(r => {
+        const ok = !failed.includes(r.key);
+        const state = pw.length === 0 ? 'todo' : (ok ? 'ok' : 'bad');
+        items[r.key].li.dataset.state = state;
+        items[r.key].sr.textContent = state === 'ok' ? ' (done)' : ' (not yet)';
+      });
+      tooLong.hidden = !failed.includes('long');
+      const done = PW_RULES.length - failed.filter(k => k !== 'long').length;
+      meter.dataset.level = pw.length === 0 ? '0' : String(done);
+      meter.firstChild.style.width = `${pw.length === 0 ? 0 : (done / PW_RULES.length) * 100}%`;
+      input.setCustomValidity(failed.length ? 'This password does not meet the rules listed below it.' : '');
+      if (repeat && matchEl) {
+        const r = repeat.value;
+        const same = r.length > 0 && r === pw;
+        matchEl.dataset.state = r.length === 0 ? '' : (same ? 'ok' : 'bad');
+        matchEl.textContent = r.length === 0 ? '' : (same ? 'Passwords match' : 'Passwords do not match yet');
+        repeat.setCustomValidity(r.length && !same ? 'The two passwords are different.' : '');
+      }
+    };
+    input.addEventListener('input', update);
+    if (userEl) userEl.addEventListener('input', update);
+    if (repeat) repeat.addEventListener('input', update);
+    const form = input.form;
+    if (form) form.addEventListener('reset', () => setTimeout(update));
+    box.refresh = update;
+    update();
+  });
+}
+
+function refreshPasswordRules() {
+  document.querySelectorAll('.pw-rules').forEach(b => b.refresh && b.refresh());
 }
 
 function initSignup() {
@@ -1302,7 +1429,7 @@ async function runExtractionAndEvaluation() {
     state.recoveredExact = expected ? data.recovered_message === expected : null;
     // Older servers don't report error correction: show nothing rather than a false "failed".
     state.ecc = typeof data.ecc_ok === 'boolean'
-      ? { ok: data.ecc_ok, corrected: data.ecc_corrected_bytes }
+      ? { ok: data.ecc_ok, corrected: Math.max(0, Math.trunc(Number(data.ecc_corrected_bytes)) || 0) }
       : null;
     updateEccStatus();
     renderMessageDiff(expected, data.recovered_message);

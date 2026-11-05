@@ -27,6 +27,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from slowapi import _rate_limit_exceeded_handler
@@ -83,6 +84,49 @@ MAX_BODY_BYTES = 12 * 1024 * 1024
 UI_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; "
           "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
           "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")   # largest legit request = two ~512px PNG data URLs
+
+
+class BodySizeLimit:
+    """Pure ASGI middleware: counts the bytes of every request body as they arrive and stops at MAX_BODY_BYTES.
+    The Content-Length check below is not enough on its own: a chunked upload has no Content-Length."""
+
+    def __init__(self, app, max_bytes: int):
+        self.app, self.max_bytes = app, max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        seen = 0
+
+        async def limited_receive():
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > self.max_bytes:
+                    raise BodyTooLarge()
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except BodyTooLarge:
+            await JSONResponse({"detail": "Payload too large"}, status_code=413)(scope, receive, send)
+
+
+class BodyTooLarge(HTTPException):
+    """An HTTPException, so FastAPI's body reader passes it through as a clean 413 (it turns other errors raised
+    while reading the body into a generic 400)."""
+
+    def __init__(self):
+        super().__init__(status_code=413, detail="Payload too large")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_without_input(request: Request, exc: RequestValidationError):
+    # FastAPI's default 422 echoes the submitted value back (e.g. an over-long password). Keep only where and why.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": [str(x) for x in e.get("loc", ())], "msg": e.get("msg", "Invalid value"), "type": e.get("type", "")}
+        for e in exc.errors()]})
 
 
 @app.middleware("http")
@@ -348,6 +392,9 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
 # With SERVE_UI=true (default) this server also serves fyp-stego-app/, so a single address (e.g. the Tailscale
 # Funnel URL) carries both the app and the API: no CORS, first-party cookies. Mounted LAST so /api/* wins.
 # Only that folder is reachable; Starlette refuses paths that climb out of it (../).
+# Outermost layer: refuse oversized bodies before anything else reads them.
+app.add_middleware(BodySizeLimit, max_bytes=MAX_BODY_BYTES)
+
 if config.SERVE_UI:
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=str(Path(__file__).resolve().parent / "fyp-stego-app"), html=True), name="ui")
