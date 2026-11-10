@@ -1742,3 +1742,96 @@ input[type="password"]::-ms-reveal, input[type="password"]::-ms-clear { display:
 .pw-match[data-state="ok"] { color: var(--success); }
 .pw-match[data-state="bad"] { color: var(--danger); }
 @media (max-width: 420px) { .pw-rule-list { grid-template-columns: 1fr; } }
+
+/* =====================================================================================================
+   Palette A, "midnight + electric blue" (10 Nov 2026), 60-30-10:
+     60%  page background            --bg            (blue-tinted near-black / soft blue-white)
+     30%  cards, top bar, inputs     --surface(-2/3) (one step lighter navy / white)
+     10%  actions and focus          --accent        (#2563EB electric blue; #38BDF8 sky glow, used sparingly)
+   Method colours (CNN/DCT/DWT/LSB) and pass/fail colours carry meaning, so they sit outside the 60-30-10.
+   Every text colour was checked against all four surface levels: >= 4.5:1 (WCAG AA); control outlines >= 3:1.
+   ===================================================================================================== */
+body.dark-theme {
+  --bg: #0A0F1C;
+  --surface: #121A2B;
+  --surface-2: #18223A;
+  --surface-3: #1F2B45;
+  --border: #22304A;
+  --border-strong: #2E3D5C;
+  --border-control: #5F6E8C;
+
+  --text: #E6EBF5;
+  --text-2: #9AA6BD;
+  --text-3: #8592AB;
+
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-text: #60A5FA;
+  --accent-soft: rgba(37, 99, 235, 0.18);
+  --glow: #38BDF8;
+
+  --canvas-bg: #070B15;
+  --checker: #121A2B;
+  --overlay: rgba(4, 7, 15, 0.78);
+
+  --neu-out: -5px -5px 14px rgba(120, 150, 220, 0.035), 8px 10px 26px rgba(2, 5, 14, 0.62);
+  --neu-out-sm: -3px -3px 8px rgba(120, 150, 220, 0.04), 4px 5px 12px rgba(2, 5, 14, 0.55);
+  --neu-in: inset 3px 3px 8px rgba(2, 5, 14, 0.55), inset -3px -3px 8px rgba(120, 150, 220, 0.035);
+  --neu-in-sm: inset 2px 2px 4px rgba(2, 5, 14, 0.5), inset -1px -1px 3px rgba(120, 150, 220, 0.04);
+  --glass: rgba(14, 20, 34, 0.66);
+  --glass-strong: rgba(18, 26, 43, 0.84);
+  --glass-edge: rgba(130, 160, 230, 0.10);
+  --card-edge: rgba(130, 160, 230, 0.07);
+  --ambient-1: rgba(37, 99, 235, 0.16);
+  --ambient-2: rgba(56, 189, 248, 0.07);
+  --glow-accent: 0 6px 20px -6px rgba(37, 99, 235, 0.65), 0 0 0 1px rgba(56, 189, 248, 0.12);
+}
+body.light-theme {
+  --bg: #F4F7FB;
+  --surface: #FFFFFF;
+  --surface-2: #EEF3FA;
+  --surface-3: #E3EAF5;
+  --border: #DCE4EF;
+  --border-strong: #C3CFDF;
+  --border-control: #7A889E;
+
+  --text: #0F172A;
+  --text-2: #475569;
+  --text-3: #556378;
+
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-text: #1D4ED8;
+  --accent-soft: rgba(37, 99, 235, 0.10);
+  --glow: #0EA5E9;
+  --warning: #8A5700;
+
+  --canvas-bg: #E3EAF5;
+  --checker: #DCE4EF;
+  --overlay: rgba(15, 23, 42, 0.5);
+
+  --neu-out: -6px -6px 16px rgba(255, 255, 255, 0.95), 8px 10px 24px rgba(30, 58, 110, 0.10);
+  --neu-out-sm: -3px -3px 8px rgba(255, 255, 255, 0.95), 4px 5px 12px rgba(30, 58, 110, 0.09);
+  --neu-in: inset 3px 3px 8px rgba(30, 58, 110, 0.09), inset -3px -3px 8px rgba(255, 255, 255, 0.95);
+  --neu-in-sm: inset 2px 2px 4px rgba(30, 58, 110, 0.08), inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+  --glass: rgba(255, 255, 255, 0.66);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --ambient-1: rgba(37, 99, 235, 0.10);
+  --ambient-2: rgba(14, 165, 233, 0.06);
+  --glow-accent: 0 6px 16px -6px rgba(37, 99, 235, 0.45);
+}
+
+/* the 10%: buttons use the accent as a solid (white text 5.2:1 at the lightest point) */
+.btn-primary { background-color: var(--accent); background-image: linear-gradient(180deg, #2563EB, #1D4ED8); }
+.btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); background-image: linear-gradient(180deg, #1E56D6, #1A44C2);
+  box-shadow: 0 8px 24px -6px rgba(37, 99, 235, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.2); }
+.logo-icon { background: linear-gradient(135deg, #2563EB, #1D4ED8); box-shadow: 0 4px 14px -4px rgba(37, 99, 235, 0.7); }
+
+/* "alive", in small doses: the sky glow marks only where you are and what has focus */
+.site-link[aria-current="page"] { color: var(--accent-text); background: var(--accent-soft); box-shadow: inset 0 -2px 0 var(--glow); }
+.home-tab-indicator { box-shadow: var(--neu-out-sm), 0 0 0 1px rgba(56, 189, 248, 0.18); }
+.form-control:focus, .login-card input:focus { border-color: var(--accent); box-shadow: var(--neu-in-sm), 0 0 0 3px rgba(56, 189, 248, 0.22); }
+.dropzone:hover, .dropzone.dragging { border-color: var(--glow); }
+.dropzone.dragging .dropzone-icon, .dropzone:hover .dropzone-icon { color: var(--glow); }
+.switch input:checked + .slider { background: var(--accent); box-shadow: var(--neu-in-sm), 0 0 10px -2px rgba(56, 189, 248, 0.6); }
+.nav-btn.active .step-num, .stepper .nav-btn.done .step-num { box-shadow: 0 0 0 3px var(--accent-soft); }
