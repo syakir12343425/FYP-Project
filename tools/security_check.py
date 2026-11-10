@@ -56,6 +56,10 @@ def request(base, method, path, body=None, headers=None, raw=None, timeout=20):
         return e.code, dict(e.headers), e.read(200_000).decode("utf-8", "replace"), time.time() - t0
     except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
         return 0, {}, str(e), time.time() - t0
+    except OSError as e:
+        # e.g. ConnectionAbortedError / ConnectionResetError: the server answered early (413) and closed the
+        # connection while we were still sending. Reported as status 0 = "connection closed by the server".
+        return 0, {}, f"connection closed by the server: {type(e).__name__}", time.time() - t0
 
 
 def api_headers(base):
@@ -76,7 +80,8 @@ def check_headers(base, https):
             report("PASS" if "max-age" in h.get("strict-transport-security", "") else "FAIL", f"{path}: HSTS")
         server = h.get("server", "")
         report("PASS" if "uvicorn" not in server.lower() and "python" not in server.lower() else "FAIL",
-               f"{path}: no server software banner", server or "none")
+               f"{path}: no server software banner", (server or "none") +
+               ("  -> start uvicorn with --no-server-header" if "uvicorn" in server.lower() else ""))
 
 
 def check_closed_doors(base):
@@ -164,7 +169,8 @@ def check_body_limits(base):
     print("\n6. Oversized request bodies")
     big = b'{"image":"' + b"A" * (13 * 1024 * 1024) + b'"}'
     st, _, _, _ = request(base, "POST", "/api/extract", raw=big, headers={**api_headers(base), "Content-Type": "application/json"}, timeout=60)
-    report("PASS" if st in (413, 0) else "FAIL", "13 MB body with Content-Length", f"HTTP {st}")
+    report("PASS" if st in (413, 0) else "FAIL", "13 MB body with Content-Length",
+           "refused, connection closed early" if st == 0 else f"HTTP {st}")
     # chunked: no Content-Length header at all
     u = urlsplit(base)
     try:

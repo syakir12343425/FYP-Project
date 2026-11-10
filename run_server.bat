@@ -24,7 +24,7 @@ REM Open the browser once the server answers (the model takes a few seconds to l
 start "" /b powershell -NoProfile -WindowStyle Hidden -Command "for($i=0;$i -lt 90;$i++){try{Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 http://127.0.0.1:8000/api/health | Out-Null; Start-Process 'http://localhost:8000'; break}catch{Start-Sleep 1}}"
 
 echo Starting RobustStego on http://localhost:8000 ...
-python -m uvicorn server:app --host 127.0.0.1 --port 8000
+python -m uvicorn server:app --host 127.0.0.1 --port 8000 --no-server-header
 if errorlevel 1 (
     echo.
     echo  The server stopped with an error. Common causes:
