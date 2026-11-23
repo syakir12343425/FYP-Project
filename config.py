@@ -57,3 +57,7 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8080").rstrip("/")
 # Serve the web app from this server too (one address for app + API; used with Tailscale Funnel). Set false when
 # a separate web server (e.g. Caddy) serves fyp-stego-app/.
 SERVE_UI = os.getenv("SERVE_UI", "true").lower() == "true"
+
+# Demo mode (run_demo.bat): opens straight onto the FYP with no accounts and no database, for presenting on this
+# laptop. It is LOCAL ONLY: server.py refuses any request that did not come straight from this machine.
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"

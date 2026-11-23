@@ -65,7 +65,8 @@ app = FastAPI(
     title="FYP Steganography Inference Server",
     docs_url=None if is_prod else "/docs", redoc_url=None, openapi_url=None if is_prod else "/openapi.json",
 )
-init_db()
+if not config.DEMO_MODE:
+    init_db()          # demo mode has no accounts, so it needs no database (works with no internet)
 
 # --- CORS: explicit origins only (never "*" together with credentials) ---
 app.add_middleware(
@@ -129,6 +130,22 @@ async def validation_error_without_input(request: Request, exc: RequestValidatio
         for e in exc.errors()]})
 
 
+_LOOPBACK = {"127.0.0.1", "::1"}
+# Headers a reverse proxy adds (Tailscale Funnel/Serve, Caddy, nginx). A proxied request also arrives from
+# 127.0.0.1, so in demo mode their presence means "came from outside" and is refused.
+_PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-forwarded-host", "x-real-ip",
+                  "tailscale-user-login", "tailscale-funnel-request")
+
+
+@app.middleware("http")
+async def demo_local_only(request: Request, call_next):
+    if config.DEMO_MODE:
+        host = request.client.host if request.client else ""
+        if host not in _LOOPBACK or any(h in request.headers for h in _PROXY_HEADERS):
+            return JSONResponse({"detail": "Demo mode is available on this computer only"}, status_code=403)
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     # Reject oversized bodies early (Content-Length) to blunt memory-exhaustion DoS.
@@ -153,10 +170,33 @@ async def security_middleware(request: Request, call_next):
     return resp
 
 
-if not config.MFA_ENCRYPTION_KEY:
-    raise RuntimeError("MFA_ENCRYPTION_KEY is missing from .env (needed for two-step verification). See .env.example")
-app.include_router(auth_router)
-app.include_router(admin_router)
+if config.DEMO_MODE:
+    # Demo mode: no sign-in, no accounts. Every protected route runs as a fixed demo user and nothing is written
+    # to the database. Account and admin routes are not mounted at all.
+    from types import SimpleNamespace
+
+    _DEMO_USER = SimpleNamespace(username="demo", role="user")
+
+    def _demo_user():
+        return _DEMO_USER
+
+    def _no_db():
+        yield None
+
+    app.dependency_overrides[require_user] = _demo_user
+    app.dependency_overrides[get_db] = _no_db
+else:
+    if not config.MFA_ENCRYPTION_KEY:
+        raise RuntimeError("MFA_ENCRYPTION_KEY is missing from .env (needed for two-step verification). See .env.example")
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+
+
+def _audit(db, *args, **kwargs):
+    """Audit log entry; skipped in demo mode, which has no database."""
+    if db is not None:
+        audit(db, *args, **kwargs)
+
 
 # ---------------------------------------------------------------- model load
 _ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
@@ -277,7 +317,7 @@ class ExtractResponse(BaseModel):
 # ------------------------------------------------------------------ routes
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "demo": config.DEMO_MODE}
 
 
 @app.post("/api/embed", response_model=EmbedResponse)
@@ -306,7 +346,7 @@ def embed(request: Request, req: EmbedRequest, user: AdminUser = Depends(require
     psnr = float(peak_signal_noise_ratio(cover_np, stego_np, data_range=255))
     ssim = float(structural_similarity(cover_np, stego_np, channel_axis=2, data_range=255))
 
-    audit(db, "embed", request, user.username, f"method={req.method} msg_len={len(req.message)} psnr={psnr:.2f}")
+    _audit(db, "embed", request, user.username, f"method={req.method} msg_len={len(req.message)} psnr={psnr:.2f}")
     return EmbedResponse(stego_image=encode_image_base64(stego_np), psnr=psnr, ssim=ssim)
 
 
@@ -318,7 +358,7 @@ def downscale(request: Request, req: DownscaleRequest, user: AdminUser = Depends
     orig_size = img_np.shape[0]
     target_size = max(1, round(orig_size * req.scale))
     out_np = cv2_downscale_numpy(img_np, target_size, req.algorithm)
-    audit(db, "downscale", request, user.username, f"algo={req.algorithm} scale={req.scale} size={target_size}")
+    _audit(db, "downscale", request, user.username, f"algo={req.algorithm} scale={req.scale} size={target_size}")
     return DownscaleResponse(downscaled_image=encode_image_base64(out_np), size=target_size)
 
 
@@ -375,7 +415,7 @@ def extract(request: Request, req: ExtractRequest, user: AdminUser = Depends(req
             structural_similarity(cover_np, roundtrip_np, channel_axis=2, data_range=255)
         )
 
-    audit(db, "extract", request, user.username,
+    _audit(db, "extract", request, user.username,
           f"method={req.method} size={img_np.shape[0]} ber={'' if ber is None else round(ber, 4)} "
           f"ecc={'ok:' + str(decoded['corrected_bytes']) if decoded['ok'] else 'failed'}")
     return ExtractResponse(

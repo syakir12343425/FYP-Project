@@ -178,6 +178,26 @@ function silentRefresh() {
   return refreshInFlight;
 }
 
+// Demo mode (run_demo.bat): the server says so in /api/health. The page then opens straight onto the project,
+// with no sign-in. The server enforces that demo mode only answers requests from this laptop.
+function enterDemoMode() {
+  accessToken = 'demo';                       // ignored by the demo server; keeps apiFetch unchanged
+  session = { username: 'Demo', role: 'user', mustChange: false, mfaEnabled: true };
+  document.body.dataset.demo = '1';
+  document.body.dataset.role = 'user';
+  document.getElementById('current-user').innerText = 'Demo';
+  document.getElementById('login-overlay').classList.remove('active');
+  handleNavigation('page-home');
+}
+
+async function startSession() {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`);
+    if (res.ok && (await res.json()).demo === true) { enterDemoMode(); return; }
+  } catch (_) { /* server unreachable: the normal sign-in flow shows its own error */ }
+  silentRefresh();   // restore the session after a page reload (uses the httpOnly cookie)
+}
+
 async function doRefresh() {
   try {
     const res = await authPost("/api/auth/refresh");
@@ -2214,7 +2234,7 @@ function initApp() {
 
   document.getElementById('login-form').addEventListener('submit', handleLogin);
   document.getElementById('btn-logout').addEventListener('click', handleLogout);
-  silentRefresh();   // restore the session after a page reload (uses the httpOnly cookie)
+  startSession();
 
   elements.btnModeSide.addEventListener('click', () => {
     elements.btnModeSide.classList.add('active');

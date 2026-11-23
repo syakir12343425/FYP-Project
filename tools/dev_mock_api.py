@@ -32,6 +32,7 @@ def enc(a):
 
 import os, secrets, re as _re
 ROLE = os.environ.get("MOCK_ROLE", "admin"); MUST = os.environ.get("MOCK_MUST", "0") == "1"
+DEMO = os.environ.get("MOCK_DEMO", "0") == "1"   # $env:MOCK_DEMO="1": like run_demo.bat (no sign-in)
 LOGGED_OUT = os.environ.get("MOCK_LOGGEDOUT", "0") == "1"; MFA = os.environ.get("MOCK_MFA", "1") == "1"
 CODES_LEFT = 10
 QR = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21"><rect width="21" height="21" fill="#fff"/><rect x="1" y="1" width="7" height="7"/><rect x="13" y="1" width="7" height="7"/><rect x="1" y="13" width="7" height="7"/><rect x="10" y="10" width="2" height="2"/></svg>'
@@ -61,6 +62,8 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_OPTIONS(self): self._h()
     def do_GET(self):
+        if self.path.endswith("/api/health"):
+            self._h(); self.wfile.write(json.dumps({"status": "ok", "demo": DEMO}).encode()); return
         if self.path.endswith("/auth/mfa/status"):
             self._h(); self.wfile.write(json.dumps({"mfa_enabled": MFA, "recovery_codes_left": CODES_LEFT, "required": ROLE == "admin"}).encode()); return
         if self.path.endswith("/admin/users"):

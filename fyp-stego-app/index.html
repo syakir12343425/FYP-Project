@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=20261110a">
+  <link rel="stylesheet" href="styles.css?v=20261117a">
 </head>
 <body class="dark-theme hide-academic-figures" data-mode="home">
 
@@ -112,9 +112,10 @@
             <input type="checkbox" id="toggle-theme" checked aria-label="Dark theme">
             <span class="slider"></span>
           </label>
-          <span class="site-user">Signed in as <strong id="current-user">-</strong></span>
-          <button type="button" class="site-link" data-goto="page-account" data-mode-link="account">Account</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Log out</button>
+          <span class="demo-badge demo-only">Demo mode, this laptop only</span>
+          <span class="site-user no-demo">Signed in as <strong id="current-user">-</strong></span>
+          <button type="button" class="site-link no-demo" data-goto="page-account" data-mode-link="account">Account</button>
+          <button type="button" class="btn btn-secondary btn-sm no-demo" id="btn-logout">Log out</button>
         </div>
       </div>
       <!-- Hide flow steps: only shown while hiding a message -->
@@ -168,6 +169,20 @@
         <!-- ================= PAGE 1: HOME / EMBEDDING MODULE ================= -->
         <!-- ================= START: choose a flow ================= -->
         <section id="page-home" class="viewport active">
+          <!-- Demo mode only (run_demo.bat): what the project is about, before the tool. Numbers: results/core_default.csv
+               and results/core_matched35.csv (tools/benchmark_methods.py, 14 Nov 2026), thesis Chapter 5. -->
+          <div class="demo-intro demo-only" aria-labelledby="demo-title">
+            <p class="demo-project">Final Year Project, Universiti Sains Islam Malaysia</p>
+            <h2 class="demo-title" id="demo-title">Does a hidden message survive the resizing AI does?</h2>
+            <p class="demo-lead">AI models shrink every image before they read it, to 224&ndash;384 px. A message hidden the usual way, in the least significant bits (LSB), is destroyed by that. This project trains a CNN encoder&ndash;decoder to hide a message that survives, and compares it with LSB, DCT and DWT at equal image quality.</p>
+            <dl class="demo-facts">
+              <div class="demo-fact"><dt>0%</dt><dd>of LSB messages survive resizing</dd></div>
+              <div class="demo-fact"><dt>88.9%</dt><dd>recovered exactly by the CNN, at 35.5&nbsp;dB image quality</dd></div>
+              <div class="demo-fact"><dt>86.6%</dt><dd>at 224&nbsp;px, the harshest size; DCT 78.0%, DWT 74.0%</dd></div>
+            </dl>
+            <p class="demo-source">Measured on 100 DIV2K photos &times; 5 resize algorithms &times; 4 sizes = 2,000 attacks per method.</p>
+            <p class="demo-try">Try it: hide a message, shrink the image, read it back.</p>
+          </div>
           <div class="home-tool">
             <h2 class="home-title">Hide a message in a photo.<br>Read it back after resizing.</h2>
             <p class="home-sub">Hidden text that is built to survive downscaling in AI pipelines, tested against resizing, JPEG and WhatsApp stickers.</p>
@@ -1286,6 +1301,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261110a"></script>
+  <script src="app.js?v=20261117a"></script>
 </body>
 </html>
