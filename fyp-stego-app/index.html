@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robust Steganography against Image Downscaling attacks - FYP UI</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=20261117a">
+  <link rel="stylesheet" href="styles.css?v=20261123a">
 </head>
 <body class="dark-theme hide-academic-figures" data-mode="home">
 
@@ -174,12 +174,13 @@
           <div class="demo-intro demo-only" aria-labelledby="demo-title">
             <p class="demo-project">Final Year Project, Universiti Sains Islam Malaysia</p>
             <h2 class="demo-title" id="demo-title">Does a hidden message survive the resizing AI does?</h2>
-            <p class="demo-lead">AI models shrink every image before they read it, to 224&ndash;384 px. A message hidden the usual way, in the least significant bits (LSB), is destroyed by that. This project trains a CNN encoder&ndash;decoder to hide a message that survives, and compares it with LSB, DCT and DWT at equal image quality.</p>
+            <p class="demo-lead">AI models shrink every image before they read it, to 224&ndash;384 px. A message hidden the usual way, in the least significant bits (LSB), is destroyed by that. This project trains a CNN encoder&ndash;decoder to hide a message that survives, and compares it with LSB, and with DCT and DWT tuned to the same image quality as the CNN.</p>
             <dl class="demo-facts">
               <div class="demo-fact"><dt>0%</dt><dd>of LSB messages survive resizing</dd></div>
               <div class="demo-fact"><dt>88.9%</dt><dd>recovered exactly by the CNN, at 35.5&nbsp;dB image quality</dd></div>
-              <div class="demo-fact"><dt>86.6%</dt><dd>at 224&nbsp;px, the harshest size; DCT 78.0%, DWT 74.0%</dd></div>
+              <div class="demo-fact"><dt>86.6%</dt><dd>at 384&nbsp;px, the hardest size; DCT 78.0%, DWT 74.0%</dd></div>
             </dl>
+            <p class="demo-note">Overall, DCT is close (90.9%). The CNN&rsquo;s strength is consistency across sizes and algorithms.</p>
             <p class="demo-source">Measured on 100 DIV2K photos &times; 5 resize algorithms &times; 4 sizes = 2,000 attacks per method.</p>
             <p class="demo-try">Try it: hide a message, shrink the image, read it back.</p>
           </div>
@@ -1301,6 +1302,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261117a"></script>
+  <script src="app.js?v=20261123a"></script>
 </body>
 </html>

@@ -1851,6 +1851,7 @@ body[data-demo] .no-demo { display: none !important; }
 .demo-fact dt { font-size: 2rem; font-weight: 700; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .demo-fact:nth-child(2) dt, .demo-fact:nth-child(3) dt { color: var(--accent-text); }
 .demo-fact dd { margin: var(--space-2) 0 0; color: var(--text-2); font-size: var(--text-sm); line-height: 1.45; }
+.demo-note { margin: var(--space-4) 0 0; color: var(--text-2); max-width: 62ch; }
 .demo-source { margin: var(--space-3) 0 0; color: var(--text-3); font-size: var(--text-xs, 0.75rem); }
 .demo-try { margin: var(--space-6) 0 0; font-size: 1.25rem; font-weight: 700; color: var(--text); }
 body[data-demo] .home-title, body[data-demo] .home-sub { display: none; }
